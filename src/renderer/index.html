@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desktop Order Management</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/components.css">
+</head>
+<body>
+    <div class="app">
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">Desktop Order Management</h1>
+                <div class="header-actions">
+                    <button id="btn-new-order" class="btn btn-primary">
+                        <span class="icon">add</span>
+                        New Order
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="app-body">
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3>Quick Actions</h3>
+                    <div class="action-buttons">
+                        <button id="btn-sidebar-new-order" class="action-btn">
+                            <span class="icon">add</span>
+                            Add Order
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Search & Filter</h3>
+                    <div class="search-container">
+                        <input type="text" id="search-input" placeholder="Search by name or phone..." class="search-input">
+                        <button id="btn-clear-search" class="btn-clear-search">×</button>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="status-filter">Status:</label>
+                        <select id="status-filter" class="filter-select">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Statistics</h3>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Total Orders:</span>
+                            <span id="stat-total" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Today:</span>
+                            <span id="stat-today" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">This Week:</span>
+                            <span id="stat-week" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Pending:</span>
+                            <span id="stat-pending" class="stat-value">0</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="main-content">
+                <div class="tabs">
+                    <button class="tab active" data-tab="all">All Orders</button>
+                    <button class="tab" data-tab="today">Today's Orders</button>
+                    <button class="tab" data-tab="week">This Week</button>
+                    <button class="tab" data-tab="completed">Completed</button>
+                    <button class="tab" data-tab="pending">Pending</button>
+                </div>
+
+                <div class="content-area">
+                    <div id="loading" class="loading hidden">
+                        <div class="spinner"></div>
+                        <span>Loading orders...</span>
+                    </div>
+
+                    <div id="orders-view" class="orders-view">
+                        <div class="orders-header">
+                            <div class="orders-controls">
+                                <div class="sort-controls">
+                                    <label for="sort-select">Sort by:</label>
+                                    <select id="sort-select" class="sort-select">
+                                        <option value="date-desc">Date (Newest First)</option>
+                                        <option value="date-asc">Date (Oldest First)</option>
+                                        <option value="name-asc">Customer Name (A-Z)</option>
+                                        <option value="name-desc">Customer Name (Z-A)</option>
+                                    </select>
+                                </div>
+                                <div class="view-controls">
+                                    <button id="btn-refresh" class="btn btn-secondary">Refresh</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="orders-container" class="orders-container">
+                            <!-- Orders will be loaded here -->
+                        </div>
+
+                        <div id="no-orders" class="no-orders hidden">
+                            <span class="icon" style="font-size: 64px; color: var(--text-muted);">assignment</span>
+                            <h3>No orders found</h3>
+                            <p>Start by adding your first order using the "New Order" button.</p>
+                        </div>
+
+                        <div class="pagination">
+                            <button id="btn-prev-page" class="btn btn-secondary" disabled>Previous</button>
+                            <span id="page-info" class="page-info">Page 1 of 1</span>
+                            <button id="btn-next-page" class="btn btn-secondary" disabled>Next</button>
+                        </div>
+                    </div>
+
+                    <div id="order-form-view" class="order-form-view hidden">
+                        <div class="form-header">
+                            <h2>Add New Order</h2>
+                            <button id="btn-close-form" class="btn btn-secondary">Cancel</button>
+                        </div>
+
+                        <form id="order-form" class="order-form">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="customer-name">Customer Name *</label>
+                                    <input type="text" id="customer-name" name="customerName" required class="form-input">
+                                    <span class="error-message" id="error-customer-name"></span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="phone-number">Phone Number *</label>
+                                    <input type="tel" id="phone-number" name="phoneNumber" required class="form-input">
+                                    <span class="error-message" id="error-phone-number"></span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="order-date">Order Date *</label>
+                                    <input type="date" id="order-date" name="orderDate" required class="form-input">
+                                    <span class="error-message" id="error-order-date"></span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="order-time">Order Time *</label>
+                                    <input type="text" id="order-time" name="orderTime" required class="form-input" placeholder="12:00 PM">
+                                    <span class="error-message" id="error-order-time"></span>
+                                </div>
+
+
+                                <div class="form-group full-width">
+                                    <label for="order-notes">Order Notes</label>
+                                    <textarea id="order-notes" name="orderNotes" class="form-textarea" rows="3" placeholder="Additional details or special requirements..."></textarea>
+                                </div>
+
+                                <div class="form-group full-width">
+                                    <label>Requirements Image *</label>
+                                    <div class="image-upload-area" id="image-upload-area">
+                                        <div class="upload-placeholder">
+                                            <span class="icon" style="font-size: 48px; color: var(--text-muted);">photo_camera</span>
+                                            <p>Drag and drop an image here or click to select</p>
+                                            <button type="button" id="btn-select-image" class="btn btn-secondary">Select Image</button>
+                                        </div>
+                                        <div class="image-preview hidden" id="image-preview">
+                                            <img id="preview-image" src="" alt="Preview">
+                                            <button type="button" id="btn-remove-image" class="btn-remove-image">×</button>
+                                        </div>
+                                    </div>
+                                    <span class="error-message" id="error-image"></span>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="button" id="btn-cancel-form" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" id="btn-submit-order" class="btn btn-primary">Add Order</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="order-detail-view" class="order-detail-view hidden">
+                        <div class="detail-header">
+                            <h2>Order Details</h2>
+                            <div class="detail-actions">
+                                <button id="btn-print-order" class="btn btn-primary">Print Slips</button>
+                                <button id="btn-close-detail" class="btn btn-secondary">Close</button>
+                            </div>
+                        </div>
+
+                        <div id="order-detail-content" class="order-detail-content">
+                            <!-- Order details will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <footer class="app-footer">
+            <div class="footer-content">
+                <span id="status-indicator" class="status-indicator">Ready</span>
+                <span id="last-sync" class="last-sync">Last updated: Never</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Notification System -->
+    <div id="notifications" class="notifications"></div>
+
+    <!-- Scripts -->
+    <script src="utils/helpers.js"></script>
+    <script src="debug.js"></script>
+    <script src="utils/notifications.js"></script>
+    <script src="components/order-card.js"></script>
+    <script src="components/order-form.js"></script>
+    <script src="components/order-detail.js"></script>
+    <script src="views/orders-view.js"></script>
+    <script src="views/main-view.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
