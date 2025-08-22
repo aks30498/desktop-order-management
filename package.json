@@ -13,7 +13,12 @@
     "dist": "npm run build",
     "postinstall": "electron-builder install-app-deps"
   },
-  "keywords": ["electron", "order-management", "desktop", "sqlite"],
+  "keywords": [
+    "electron",
+    "order-management",
+    "desktop",
+    "sqlite"
+  ],
   "author": "Desktop Order Management Team",
   "license": "MIT",
   "devDependencies": {
@@ -21,6 +26,10 @@
     "electron-builder": "^24.6.4"
   },
   "dependencies": {
+    "bwip-js": "^4.7.0",
+    "jsbarcode": "^3.12.1",
+    "pdfkit": "^0.17.1",
+    "puppeteer-core": "^24.17.0",
     "sql.js": "^1.8.0"
   },
   "build": {

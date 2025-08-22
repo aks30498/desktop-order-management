@@ -7,7 +7,9 @@
       "Bash(npx electron:*)",
       "Bash(node:*)",
       "Bash(grep:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": []
   }

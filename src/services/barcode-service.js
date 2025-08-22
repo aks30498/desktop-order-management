@@ -17,8 +17,14 @@ class BarcodeService {
         };
     }
 
-    generateOrderBarcodeData(order) {
-        // Create a unique barcode value using order ID and timestamp
+    generateOrderBarcodeData(order, serverPort = 8080) {
+        // If order has an image, create a URL to access it
+        if (order.image_path && order.image_path.trim()) {
+            // Create a simple HTTP URL that will serve the image
+            return `http://localhost:${serverPort}/order-image/${order.id}`;
+        }
+        
+        // Fallback: Create a unique barcode value using order ID and timestamp
         const timestamp = new Date(order.created_at).getTime().toString().slice(-6);
         const paddedId = String(order.id).padStart(4, '0');
         return `ORD${paddedId}${timestamp}`;
@@ -61,7 +67,31 @@ class BarcodeService {
 
     parseBarcodeData(barcodeString) {
         try {
-            // Parse barcode format: ORD0001123456
+            // Check if it's a HTTP URL for an order image
+            const urlMatch = barcodeString.match(/^http:\/\/localhost:(\d+)\/order-image\/(\d+)$/);
+            if (urlMatch) {
+                const port = parseInt(urlMatch[1], 10);
+                const orderId = parseInt(urlMatch[2], 10);
+                return {
+                    type: 'image_url',
+                    orderId: orderId,
+                    port: port,
+                    url: barcodeString,
+                    barcodeValue: barcodeString
+                };
+            }
+            
+            // Check if it's a file path barcode (legacy support)
+            if (barcodeString.startsWith('file://')) {
+                const filePath = barcodeString.substring(7); // Remove 'file://' prefix
+                return {
+                    type: 'image',
+                    filePath: filePath,
+                    barcodeValue: barcodeString
+                };
+            }
+            
+            // Parse legacy barcode format: ORD0001123456
             const match = barcodeString.match(/^ORD(\d{4})(\d{6})$/);
             
             if (!match) {
@@ -86,7 +116,9 @@ class BarcodeService {
     isValidBarcodeData(barcodeString) {
         try {
             const data = this.parseBarcodeData(barcodeString);
-            return data.type === 'order' && data.orderId > 0;
+            return (data.type === 'order' && data.orderId > 0) || 
+                   (data.type === 'image' && data.filePath && data.filePath.length > 0) ||
+                   (data.type === 'image_url' && data.orderId > 0);
         } catch (error) {
             return false;
         }

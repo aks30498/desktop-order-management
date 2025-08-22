@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const url = require('url');
 const database = require('../database/database');
 const printService = require('../services/print-service');
 
@@ -8,6 +10,8 @@ class OrderManagementApp {
   constructor() {
     this.mainWindow = null;
     this.isDev = process.argv.includes('--dev');
+    this.imageServer = null;
+    this.serverPort = 8080;
   }
 
   async initialize() {
@@ -19,6 +23,7 @@ class OrderManagementApp {
       this.setupMenu();
       this.setupIPC();
       this.setupImageStorage();
+      this.startImageServer();
     } catch (error) {
       console.error('Application initialization failed:', error);
       app.quit();
@@ -27,6 +32,9 @@ class OrderManagementApp {
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') {
         database.close();
+        if (this.imageServer) {
+          this.imageServer.close();
+        }
         app.quit();
       }
     });
@@ -351,6 +359,23 @@ class OrderManagementApp {
         return { success: false, error: error.message };
       }
     });
+
+    // Preview PDF
+    ipcMain.handle('preview-order-pdf', async (event, orderId) => {
+      try {
+        const order = await database.getOrderById(orderId);
+        if (!order) {
+          throw new Error('Order not found');
+        }
+        
+        const outputPath = path.join(app.getPath('temp'), `order-${orderId}-preview.pdf`);
+        const result = await printService.previewPDF(order, outputPath);
+        return { success: true, filePath: result.path };
+      } catch (error) {
+        console.error('Error creating PDF preview:', error);
+        return { success: false, error: error.message };
+      }
+    });
   }
 
   setupImageStorage() {
@@ -418,6 +443,113 @@ class OrderManagementApp {
       });
     } catch (error) {
       dialog.showErrorBox('Export Failed', `Failed to export data: ${error.message}`);
+    }
+  }
+
+  startImageServer() {
+    try {
+      this.imageServer = http.createServer((req, res) => {
+        const parsedUrl = url.parse(req.url, true);
+        
+        // Handle CORS for web scanning
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        
+        // Handle order image requests
+        const orderImageMatch = parsedUrl.pathname.match(/^\/order-image\/(\d+)$/);
+        if (orderImageMatch) {
+          const orderId = parseInt(orderImageMatch[1], 10);
+          this.serveOrderImage(orderId, res);
+          return;
+        }
+        
+        // Default 404
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+      });
+      
+      this.imageServer.listen(this.serverPort, 'localhost', () => {
+        console.log(`📷 Image server started on http://localhost:${this.serverPort}`);
+        // Make the port available globally
+        global.imageServerPort = this.serverPort;
+      });
+      
+      this.imageServer.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.log(`Port ${this.serverPort} is in use, trying port ${this.serverPort + 1}`);
+          this.serverPort += 1;
+          global.imageServerPort = this.serverPort;
+          this.imageServer.close();
+          this.startImageServer();
+        } else {
+          console.error('Image server error:', err);
+        }
+      });
+    } catch (error) {
+      console.error('Failed to start image server:', error);
+    }
+  }
+
+  async serveOrderImage(orderId, res) {
+    try {
+      // Get order from database
+      const order = await database.getOrderById(orderId);
+      if (!order || !order.image_path) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Image not found');
+        return;
+      }
+      
+      // Check if image file exists
+      if (!fs.existsSync(order.image_path)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Image file not found');
+        return;
+      }
+      
+      // Get file extension to determine content type
+      const ext = path.extname(order.image_path).toLowerCase();
+      let contentType = 'image/jpeg'; // default
+      
+      switch (ext) {
+        case '.png':
+          contentType = 'image/png';
+          break;
+        case '.gif':
+          contentType = 'image/gif';
+          break;
+        case '.webp':
+          contentType = 'image/webp';
+          break;
+        case '.jpg':
+        case '.jpeg':
+        default:
+          contentType = 'image/jpeg';
+          break;
+      }
+      
+      // Serve the image
+      res.writeHead(200, { 
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+      });
+      
+      const imageStream = fs.createReadStream(order.image_path);
+      imageStream.pipe(res);
+      
+      imageStream.on('error', (err) => {
+        console.error('Error serving image:', err);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Error serving image');
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error in serveOrderImage:', error);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal server error');
     }
   }
 }

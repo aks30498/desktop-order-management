@@ -433,12 +433,10 @@ class OrderDetail {
             previewBtn.disabled = true;
             previewBtn.innerHTML = '<span class="icon">hourglass_empty</span>Generating...';
 
-            const result = await Helpers.ipcInvoke('generate-order-pdf', order.id);
+            const result = await Helpers.ipcInvoke('preview-order-pdf', order.id);
             
             if (result.success) {
-                // Open the generated PDF
-                await Helpers.ipcInvoke('open-file', result.pdfPath);
-                notifications.success('PDF generated and opened');
+                notifications.success('PDF preview opened');
             } else {
                 throw new Error(result.error || 'Failed to generate PDF');
             }

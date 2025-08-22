@@ -36,16 +36,6 @@ class OrderDatabase {
         this.migrateDatabaseSchema();
       }
 
-      // Clear all existing data and reset database
-      console.log('🗑️ Clearing all existing data from database...');
-      try {
-        this.db.run('DELETE FROM orders');
-        this.db.run("DELETE FROM sqlite_sequence WHERE name='orders'");
-        console.log('✅ All existing data cleared successfully');
-        this.saveDatabase();
-      } catch (clearError) {
-        console.log('Note: Data clearing skipped (table may not exist yet)');
-      }
 
       return true;
     } catch (error) {

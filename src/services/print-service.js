@@ -1,5 +1,9 @@
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const PDFDocument = require('pdfkit');
+const bwipjs = require('bwip-js');
 const barcodeService = require('./barcode-service');
 
 class PrintService {
@@ -15,17 +19,11 @@ class PrintService {
             // Generate barcode for the order
             const barcode = await barcodeService.createPrintableBarcode(order, 250, 60);
             
-            // Convert image to data URL if it exists for better compatibility
-            let imageDataUrl = null;
-            if (order.image_path) {
-                imageDataUrl = await this.imageToDataURL(order.image_path);
-            }
-            
-            // Create print HTML with full features (JsBarcode + images)
-            const printHTML = this.generateFullPrintHTML(order, barcode, copies, imageDataUrl);
+            // Create simple print HTML without external dependencies
+            const printHTML = this.generateSimplePrintHTML(order, barcode, null);
             
             // Create print window
-            await this.createPrintWindow();
+            await this.createSimplePrintWindow();
             
             // Load content and print
             await this.loadContentAndPrint(printHTML);
@@ -529,6 +527,140 @@ class PrintService {
         `;
     }
 
+    generateSimplePrintHTML(order, barcode, imageDataUrl = null) {
+        const styles = this.getPrintStyles();
+        
+        const slipHTML = `
+            <div class="slip-content">
+                <div class="order-info">
+                    <div class="field">
+                        <label>Order #:</label>
+                        <span class="value">${order.id}</span>
+                    </div>
+                    
+                    <div class="field">
+                        <label>Customer:</label>
+                        <span class="value">${this.escapeHtml(order.customer_name)}</span>
+                    </div>
+                    
+                    <div class="field">
+                        <label>Phone:</label>
+                        <span class="value">${this.escapeHtml(order.phone_number)}</span>
+                    </div>
+                    
+                    <div class="field">
+                        <label>Date:</label>
+                        <span class="value">${this.formatDate(order.order_date)}</span>
+                    </div>
+                    
+                    <div class="field">
+                        <label>Time:</label>
+                        <span class="value">${this.formatTime(order.order_time)}</span>
+                    </div>
+                    
+                    <div class="field">
+                        <label>Day:</label>
+                        <span class="value">${this.getDayOfWeek(order.order_date)}</span>
+                    </div>
+                    
+                    ${order.order_notes ? `
+                        <div class="field notes">
+                            <label>Notes:</label>
+                            <span class="value">${this.escapeHtml(order.order_notes)}</span>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                ${imageDataUrl ? `
+                    <div class="image-section">
+                        <div class="image-container">
+                            <label>Requirements:</label>
+                            <img src="${imageDataUrl}" alt="Requirements" class="order-image">
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <div class="barcode-section">
+                    <div class="barcode-container">
+                        <div class="simple-barcode">${barcode.value}</div>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <div class="timestamp">Generated: ${new Date().toLocaleString()}</div>
+                    <div class="business-info">Desktop Order Management System</div>
+                </div>
+            </div>
+        `;
+        
+        const customerCopy = `
+            <div class="slip customer-copy">
+                <div class="slip-header">
+                    <h2>CUSTOMER COPY</h2>
+                </div>
+                ${slipHTML}
+            </div>
+        `;
+        
+        const businessCopy = `
+            <div class="slip business-copy">
+                <div class="slip-header">
+                    <h2>BUSINESS COPY</h2>
+                </div>
+                ${slipHTML}
+            </div>
+        `;
+        
+        return `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Order Slips - Order #${order.id}</title>
+                ${styles}
+                <style>
+                    .simple-barcode {
+                        border: 2px solid #000;
+                        padding: 8px 12px;
+                        font-family: 'Courier New', monospace;
+                        font-weight: bold;
+                        font-size: 14px;
+                        text-align: center;
+                        background: #fff;
+                        letter-spacing: 2px;
+                        margin: 5px 0;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="print-container">
+                    ${customerCopy}
+                    ${businessCopy}
+                </div>
+            </body>
+            </html>
+        `;
+    }
+
+    async previewPDF(order, previewPath) {
+        try {
+            console.log(`Creating PDF preview for order #${order.id}`);
+            
+            // Generate the PDF first
+            const pdfPath = await this.printToPDF(order, previewPath);
+            
+            // Open the PDF in the default viewer
+            console.log('Opening PDF preview...');
+            await shell.openPath(pdfPath);
+            
+            return { success: true, path: pdfPath };
+            
+        } catch (error) {
+            console.error('Error creating PDF preview:', error);
+            throw error;
+        }
+    }
+
     async createPrintWindow() {
         return new Promise((resolve, reject) => {
             try {
@@ -560,6 +692,34 @@ class PrintService {
                 resolve();
             } catch (error) {
                 console.error('Error creating print window:', error);
+                reject(error);
+            }
+        });
+    }
+
+    async createSimplePrintWindow() {
+        return new Promise((resolve, reject) => {
+            try {
+                console.log('Creating simple print window...');
+                
+                this.printWindow = new BrowserWindow({
+                    width: 400,
+                    height: 600,
+                    show: false,
+                    webPreferences: {
+                        nodeIntegration: false,
+                        contextIsolation: true,
+                        webSecurity: false
+                    },
+                    title: 'Print Order Slips'
+                });
+
+                this.printWindow.on('closed', () => {
+                    this.printWindow = null;
+                });
+
+                resolve();
+            } catch (error) {
                 reject(error);
             }
         });
@@ -616,57 +776,254 @@ class PrintService {
 
     async printToPDF(order, outputPath) {
         try {
-            console.log(`Starting full PDF generation for order #${order.id}`);
+            console.log(`Starting PDF generation for order #${order.id}`);
             
-            const barcode = await barcodeService.createPrintableBarcode(order, 250, 60);
-            console.log('Barcode generated successfully');
-            
-            // Convert image to data URL if it exists
-            let imageDataUrl = null;
-            if (order.image_path) {
-                console.log('Converting image to data URL...');
-                imageDataUrl = await this.imageToDataURL(order.image_path);
-                console.log('Image converted successfully');
-            }
-            
-            console.log('Generating full print HTML for PDF...');
-            const printHTML = this.generateFullPrintHTML(order, barcode, 2, imageDataUrl);
-            console.log('Print HTML generated successfully');
-            
-            console.log('Creating PDF window...');
-            return await this.generatePDFWithRetry(printHTML, outputPath, 3);
+            // Use PDFKit for reliable PDF generation
+            return await this.generatePDFWithPDFKit(order, outputPath);
             
         } catch (error) {
             console.error('Error creating PDF:', error);
-            throw error;
-        }
-    }
-
-    async generatePDFWithRetry(htmlContent, outputPath, maxRetries = 3) {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            // Fallback to browser method if PDFKit fails
             try {
-                console.log(`PDF generation attempt ${attempt}/${maxRetries}`);
-                return await this.generatePDFAttempt(htmlContent, outputPath);
-            } catch (error) {
-                console.error(`PDF generation attempt ${attempt} failed:`, error.message);
-                
-                if (attempt === maxRetries) {
-                    // Last attempt failed, throw error
-                    throw new Error(`PDF generation failed after ${maxRetries} attempts: ${error.message}`);
-                }
-                
-                // Wait before retry
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('Falling back to browser PDF generation...');
+                const barcode = await barcodeService.createPrintableBarcode(order, 250, 60);
+                const printHTML = this.generateSimplePrintHTML(order, barcode, null);
+                return await this.generateSimplePDFFromHTML(printHTML, outputPath);
+            } catch (fallbackError) {
+                console.error('Fallback PDF generation also failed:', fallbackError);
+                throw error; // Throw original error
             }
         }
     }
 
-    async generatePDFAttempt(htmlContent, outputPath) {
+    async generatePDFWithPDFKit(order, outputPath) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                console.log('Creating professional PDF with PDFKit...');
+                
+                const doc = new PDFDocument({
+                    size: 'A4',
+                    margin: 40
+                });
+                
+                // Pipe the document to the output file
+                const stream = fs.createWriteStream(outputPath);
+                doc.pipe(stream);
+                
+                // Generate barcode with correct server port
+                // Get the current server port from main process or use default
+                const serverPort = global.imageServerPort || 8080;
+                const barcode = await barcodeService.createPrintableBarcode(order, serverPort);
+                
+                // Create barcode image
+                let barcodeBuffer = null;
+                try {
+                    barcodeBuffer = await bwipjs.toBuffer({
+                        bcid: 'code128',
+                        text: barcode.value,
+                        scale: 2,
+                        height: 10,
+                        includetext: false,
+                        backgroundcolor: 'ffffff',
+                        color: '000000'
+                    });
+                } catch (error) {
+                    console.warn('Barcode generation failed, using text fallback:', error);
+                }
+                
+                // Load order image if exists
+                let imageBuffer = null;
+                if (order.image_path && fs.existsSync(order.image_path)) {
+                    try {
+                        imageBuffer = fs.readFileSync(order.image_path);
+                    } catch (error) {
+                        console.warn('Failed to load order image:', error);
+                    }
+                }
+                
+                // Helper function to add a professional slip
+                const addSlip = async (title, startY) => {
+                    // Title header with background
+                    doc.rect(50, startY, 500, 30).fillAndStroke('#f0f0f0', '#000000');
+                    doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold')
+                       .text(title, 50, startY + 8, { align: 'center', width: 500 });
+                    
+                    let currentY = startY + 45;
+                    
+                    // Order information section
+                    doc.fontSize(10).font('Helvetica-Bold')
+                       .text('ORDER INFORMATION', 60, currentY);
+                    currentY += 20;
+                    
+                    // Order details with proper spacing
+                    const leftColumn = [
+                        ['Order #:', order.id],
+                        ['Date:', this.formatDate(order.order_date)],
+                        ['Time:', this.formatTime(order.order_time)],
+                        ['Day:', this.getDayOfWeek(order.order_date)]
+                    ];
+                    
+                    const rightColumn = [
+                        ['Customer:', order.customer_name],
+                        ['Phone:', order.phone_number],
+                        ...(order.weight ? [['Weight:', order.weight]] : []),
+                        ...(order.address ? [['Address:', order.address]] : [])
+                    ];
+                    
+                    // Left column
+                    let leftY = currentY;
+                    leftColumn.forEach(([label, value]) => {
+                        doc.font('Helvetica-Bold').fontSize(9)
+                           .text(label, 60, leftY, { width: 80, continued: false });
+                        doc.font('Helvetica').fontSize(9)
+                           .text(String(value), 140, leftY, { width: 140 });
+                        leftY += 15;
+                    });
+                    
+                    // Right column
+                    let rightY = currentY;
+                    rightColumn.forEach(([label, value]) => {
+                        doc.font('Helvetica-Bold').fontSize(9)
+                           .text(label, 300, rightY, { width: 80, continued: false });
+                        doc.font('Helvetica').fontSize(9)
+                           .text(String(value), 380, rightY, { width: 160 });
+                        rightY += 15;
+                    });
+                    
+                    currentY = Math.max(leftY, rightY) + 10;
+                    
+                    // Notes section if exists
+                    if (order.order_notes) {
+                        doc.font('Helvetica-Bold').fontSize(9)
+                           .text('NOTES:', 60, currentY);
+                        currentY += 15;
+                        doc.font('Helvetica').fontSize(9)
+                           .text(order.order_notes, 60, currentY, { 
+                               width: 480, 
+                               align: 'left'
+                           });
+                        currentY += Math.ceil(order.order_notes.length / 80) * 12 + 10;
+                    }
+                    
+                    // Create two columns for image and barcode
+                    const columnY = currentY + 10;
+                    
+                    // Left side - Requirements Image
+                    doc.font('Helvetica-Bold').fontSize(9)
+                       .text('REQUIREMENTS:', 60, columnY);
+                    
+                    if (imageBuffer) {
+                        try {
+                            doc.image(imageBuffer, 60, columnY + 15, {
+                                width: 200,
+                                height: 150,
+                                fit: [200, 150],
+                                align: 'center'
+                            });
+                        } catch (error) {
+                            doc.font('Helvetica').fontSize(8)
+                               .text('Image could not be displayed', 60, columnY + 15, { width: 200 });
+                        }
+                    } else {
+                        doc.rect(60, columnY + 15, 200, 80).stroke();
+                        doc.font('Helvetica').fontSize(8)
+                           .text('No image attached', 60, columnY + 50, { 
+                               width: 200, 
+                               align: 'center' 
+                           });
+                    }
+                    
+                    // Right side - Barcode
+                    doc.font('Helvetica-Bold').fontSize(9)
+                       .text('BARCODE:', 320, columnY);
+                    
+                    if (barcodeBuffer) {
+                        try {
+                            doc.image(barcodeBuffer, 320, columnY + 15, {
+                                width: 200,
+                                height: 60
+                            });
+                            // Barcode text
+                            doc.font('Courier').fontSize(8)
+                               .text(barcode.value, 320, columnY + 80, { 
+                                   width: 200, 
+                                   align: 'center' 
+                               });
+                        } catch (error) {
+                            doc.rect(320, columnY + 15, 200, 60).stroke();
+                            doc.font('Courier').fontSize(10)
+                               .text(barcode.value, 320, columnY + 40, { 
+                                   width: 200, 
+                                   align: 'center' 
+                               });
+                        }
+                    } else {
+                        // Fallback text barcode
+                        doc.rect(320, columnY + 15, 200, 40).stroke();
+                        doc.font('Courier-Bold').fontSize(10)
+                           .text(barcode.value, 320, columnY + 30, { 
+                               width: 200, 
+                               align: 'center' 
+                           });
+                    }
+                    
+                    // Footer
+                    const footerY = columnY + 180;
+                    doc.fontSize(7).font('Helvetica')
+                       .text(`Generated: ${new Date().toLocaleString()}`, 60, footerY)
+                       .text('Desktop Order Management System', 60, footerY + 10);
+                    
+                    // Border around entire slip
+                    doc.rect(50, startY, 500, footerY - startY + 25).stroke();
+                    
+                    return footerY + 40;
+                };
+                
+                // Add customer copy
+                let nextY = await addSlip('CUSTOMER COPY', 50);
+                
+                // Add page break if needed
+                if (nextY > 600) {
+                    doc.addPage();
+                    nextY = 50;
+                }
+                
+                // Add business copy
+                await addSlip('BUSINESS COPY', nextY + 30);
+                
+                // Finalize the document
+                doc.end();
+                
+                stream.on('finish', () => {
+                    console.log(`Professional PDF created successfully: ${outputPath}`);
+                    resolve(outputPath);
+                });
+                
+                stream.on('error', (error) => {
+                    console.error('Error writing PDF:', error);
+                    reject(error);
+                });
+                
+            } catch (error) {
+                console.error('Error in PDFKit generation:', error);
+                reject(error);
+            }
+        });
+    }
+
+    async generateSimplePDFFromHTML(htmlContent, outputPath) {
         return new Promise((resolve, reject) => {
             let pdfWindow = null;
-            
+            const timeout = setTimeout(() => {
+                console.error('PDF generation timed out');
+                if (pdfWindow && !pdfWindow.isDestroyed()) {
+                    pdfWindow.close();
+                }
+                reject(new Error('PDF generation timed out'));
+            }, 10000);
+
             try {
-                console.log('Creating PDF window...');
+                console.log('Creating simple PDF window...');
                 
                 pdfWindow = new BrowserWindow({
                     width: 800,
@@ -675,48 +1032,33 @@ class PrintService {
                     webPreferences: {
                         nodeIntegration: false,
                         contextIsolation: true,
-                        webSecurity: false, // Allow data URLs and external resources
-                        allowRunningInsecureContent: false
-                    },
-                    title: 'PDF Generation'
-                });
-
-                // Set shorter timeout
-                const timeout = setTimeout(() => {
-                    console.error('PDF generation timed out after 15 seconds');
-                    if (pdfWindow && !pdfWindow.isDestroyed()) {
-                        pdfWindow.close();
+                        webSecurity: false
                     }
-                    reject(new Error('PDF generation timed out after 15 seconds'));
-                }, 15000);
+                });
 
                 pdfWindow.on('closed', () => {
                     pdfWindow = null;
                 });
 
-                console.log('Loading HTML content...');
-                pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+                const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`;
+                pdfWindow.loadURL(dataUrl);
                 
                 pdfWindow.webContents.once('did-finish-load', async () => {
                     try {
-                        console.log('HTML loaded, waiting for barcode rendering...');
                         clearTimeout(timeout);
+                        console.log('Content loaded, generating PDF...');
                         
-                        // Wait a bit for JsBarcode to render
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        console.log('Generating PDF...');
+                        // Minimal wait time
+                        await new Promise(resolve => setTimeout(resolve, 500));
                         
-                        const pdfOptions = {
+                        const pdfData = await pdfWindow.webContents.printToPDF({
                             pageSize: 'A4',
                             printBackground: true,
-                            marginsType: 0 // No margins
-                        };
-
-                        const data = await pdfWindow.webContents.printToPDF(pdfOptions);
-                        console.log('PDF data generated, writing to file...');
+                            marginsType: 1 // Minimum margins
+                        });
                         
-                        require('fs').writeFileSync(outputPath, data);
-                        console.log(`PDF saved successfully: ${outputPath}`);
+                        fs.writeFileSync(outputPath, pdfData);
+                        console.log(`PDF saved: ${outputPath}`);
                         
                         if (!pdfWindow.isDestroyed()) {
                             pdfWindow.close();
@@ -724,7 +1066,7 @@ class PrintService {
                         resolve(outputPath);
                         
                     } catch (error) {
-                        console.error('Error in PDF generation step:', error);
+                        console.error('PDF generation error:', error);
                         clearTimeout(timeout);
                         if (pdfWindow && !pdfWindow.isDestroyed()) {
                             pdfWindow.close();
@@ -734,7 +1076,7 @@ class PrintService {
                 });
 
                 pdfWindow.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
-                    console.error('Failed to load HTML content:', errorCode, errorDescription);
+                    console.error('Failed to load content:', errorDescription);
                     clearTimeout(timeout);
                     if (pdfWindow && !pdfWindow.isDestroyed()) {
                         pdfWindow.close();
@@ -743,6 +1085,7 @@ class PrintService {
                 });
 
             } catch (error) {
+                clearTimeout(timeout);
                 if (pdfWindow && !pdfWindow.isDestroyed()) {
                     pdfWindow.close();
                 }
