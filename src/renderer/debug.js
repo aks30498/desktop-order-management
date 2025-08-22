@@ -1,6 +1,34 @@
 // Debug script to check JavaScript functionality
 console.log('Debug script loaded');
 
+// Global function to clear all database data
+window.clearAllData = async function() {
+    try {
+        const confirm = window.confirm('Are you sure you want to delete ALL orders from the database? This cannot be undone.');
+        if (!confirm) {
+            console.log('Clear data cancelled by user');
+            return;
+        }
+        
+        console.log('Clearing all database data...');
+        const result = await Helpers.ipcInvoke('clear-all-data');
+        
+        if (result.success) {
+            console.log('✅ All data cleared successfully');
+            alert('All data cleared successfully! The page will refresh.');
+            location.reload();
+        } else {
+            console.error('❌ Failed to clear data:', result.error);
+            alert('Failed to clear data: ' + result.error);
+        }
+    } catch (error) {
+        console.error('❌ Error clearing data:', error);
+        alert('Error clearing data: ' + error.message);
+    }
+};
+
+console.log('💡 To clear all database data, run: clearAllData()');
+
 // Check if Helpers is available
 window.addEventListener('load', function() {
     try {

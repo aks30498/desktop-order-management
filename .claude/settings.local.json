@@ -4,7 +4,10 @@
       "Bash(mkdir:*)",
       "Bash(npm install)",
       "Bash(rm:*)",
-      "Bash(npx electron:*)"
+      "Bash(npx electron:*)",
+      "Bash(node:*)",
+      "Bash(grep:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }

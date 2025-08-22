@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+// ipcRenderer is imported in app.js - access via window.ipcRenderer if needed
 
 class Helpers {
     static formatDate(dateString) {
@@ -45,16 +45,59 @@ class Helpers {
     }
 
     static validatePhone(phone) {
-        const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-        const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '');
-        return phoneRegex.test(cleanPhone) && cleanPhone.length >= 10;
+        if (!phone) return false;
+        
+        const cleanPhone = phone.replace(/[\s\-\(\)\.+]/g, '');
+        
+        // Must contain only digits after cleaning
+        if (!/^\d+$/.test(cleanPhone)) {
+            return false;
+        }
+        
+        // Indian mobile numbers: 10 digits starting with 6-9
+        const mobileRegex = /^[6-9]\d{9}$/;
+        
+        // Indian landline numbers: 
+        // - Without STD code: 6-8 digits starting with 2-9
+        const landlineWithoutSTD = /^[2-9]\d{5,7}$/;
+        
+        // - With STD code: 2-5 digits STD (starting with 0) + 6-8 digits number
+        const landlineWithSTD = /^(0[1-9]\d{0,3})[2-9]\d{5,7}$/;
+        
+        // International format with +91
+        const intlMobileRegex = /^91[6-9]\d{9}$/;
+        const intlLandlineRegex = /^91(0[1-9]\d{0,3})[2-9]\d{5,7}$/;
+        
+        return mobileRegex.test(cleanPhone) || 
+               landlineWithoutSTD.test(cleanPhone) ||
+               landlineWithSTD.test(cleanPhone) ||
+               intlMobileRegex.test(cleanPhone) ||
+               intlLandlineRegex.test(cleanPhone);
     }
 
     static formatPhone(phone) {
-        const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '');
-        if (cleanPhone.length === 10) {
-            return `(${cleanPhone.slice(0, 3)}) ${cleanPhone.slice(3, 6)}-${cleanPhone.slice(6)}`;
+        if (!phone) return '';
+        
+        const cleanPhone = phone.replace(/[\s\-\(\)\.+]/g, '');
+        
+        // Format Indian mobile numbers (10 digits starting with 6-9)
+        if (/^[6-9]\d{9}$/.test(cleanPhone)) {
+            return `${cleanPhone.slice(0, 5)} ${cleanPhone.slice(5)}`;
         }
+        
+        // Format international mobile (+91 followed by 10 digits)
+        if (/^91[6-9]\d{9}$/.test(cleanPhone)) {
+            const number = cleanPhone.slice(2);
+            return `+91 ${number.slice(0, 5)} ${number.slice(5)}`;
+        }
+        
+        // Format landline with STD code
+        const landlineMatch = cleanPhone.match(/^(0[1-9]\d{0,3})([2-9]\d{5,7})$/);
+        if (landlineMatch) {
+            return `${landlineMatch[1]} ${landlineMatch[2]}`;
+        }
+        
+        // Return original phone if no formatting pattern matches
         return phone;
     }
 
@@ -237,7 +280,11 @@ class Helpers {
 
     static async ipcInvoke(channel, ...args) {
         try {
-            return await ipcRenderer.invoke(channel, ...args);
+            console.log(`IPC Invoke: ${channel}`, args);
+            const { ipcRenderer } = require('electron');
+            const result = await ipcRenderer.invoke(channel, ...args);
+            console.log(`IPC Result: ${channel}`, result);
+            return result;
         } catch (error) {
             console.error(`IPC Error [${channel}]:`, error);
             throw error;

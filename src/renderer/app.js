@@ -39,7 +39,7 @@ class DesktopOrderManagementApp {
             this.isInitialized = true;
 
             console.log('App initialized successfully');
-            notifications.success('Application ready', 'Welcome');
+            // Application ready - no notification needed
 
         } catch (error) {
             console.error('App initialization failed:', error);

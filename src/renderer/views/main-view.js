@@ -23,15 +23,39 @@ class MainView {
         this.newOrderBtn = document.getElementById('btn-new-order');
         this.sidebarNewOrderBtn = document.getElementById('btn-sidebar-new-order');
         this.closeFormBtn = document.getElementById('btn-close-form');
+        
+        // Debug: Check if elements exist
+        console.log('MainView elements check:', {
+            ordersView: !!this.ordersView,
+            orderFormView: !!this.orderFormView,
+            orderDetailView: !!this.orderDetailView,
+            newOrderBtn: !!this.newOrderBtn,
+            sidebarNewOrderBtn: !!this.sidebarNewOrderBtn,
+            closeFormBtn: !!this.closeFormBtn
+        });
+        
+        if (!this.newOrderBtn) {
+            console.error('New Order button not found in DOM');
+        }
+        if (!this.sidebarNewOrderBtn) {
+            console.error('Sidebar New Order button not found in DOM');
+        }
+        if (!this.orderFormView) {
+            console.error('Order Form View not found in DOM');
+        }
     }
 
     attachEventListeners() {
         // New order buttons
-        this.newOrderBtn.addEventListener('click', () => {
+        this.newOrderBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Header New Order button clicked');
             this.showOrderForm();
         });
 
-        this.sidebarNewOrderBtn.addEventListener('click', () => {
+        this.sidebarNewOrderBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Sidebar New Order button clicked');
             this.showOrderForm();
         });
 
@@ -42,6 +66,10 @@ class MainView {
 
         // Custom events
         document.addEventListener('closeOrderForm', () => {
+            this.showOrdersView();
+        });
+
+        document.addEventListener('closeOrderDetail', () => {
             this.showOrdersView();
         });
 
@@ -58,6 +86,7 @@ class MainView {
         });
 
         // Menu events from main process
+        const { ipcRenderer } = require('electron');
         ipcRenderer.on('menu-new-order', () => {
             this.showOrderForm();
         });
@@ -90,13 +119,21 @@ class MainView {
     }
 
     showOrderForm() {
+        console.log('MainView: showOrderForm() called');
         this.hideAllViews();
         this.orderFormView.classList.remove('hidden');
         this.currentView = 'form';
-        this.orderFormComponent.show();
+        
+        // Ensure form component exists and show it
+        if (this.orderFormComponent) {
+            this.orderFormComponent.show();
+        } else {
+            console.error('OrderForm component not initialized');
+        }
         
         // Update header title context
         this.updateHeaderContext('Add New Order');
+        console.log('MainView: Switched to form view');
     }
 
     showOrderDetail(order) {
@@ -127,13 +164,16 @@ class MainView {
         // Switch back to orders view
         this.showOrdersView();
         
-        // Refresh orders view with new order
+        // Just refresh the entire view instead of trying to add the order manually
         if (this.ordersViewComponent) {
-            this.ordersViewComponent.addOrder(order);
+            try {
+                this.ordersViewComponent.refresh();
+            } catch (error) {
+                console.error('Error refreshing orders view:', error);
+            }
         }
         
-        // Show success notification
-        notifications.success(`Order #${order.id} added successfully`);
+        // Order added - success is implicit, no notification needed
     }
 
     handleOrderStatusChanged(data) {

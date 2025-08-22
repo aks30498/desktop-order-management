@@ -19,6 +19,8 @@ class OrderForm {
         this.phoneNumberInput = document.getElementById('phone-number');
         this.orderDateInput = document.getElementById('order-date');
         this.orderTimeInput = document.getElementById('order-time');
+        this.weightInput = document.getElementById('weight');
+        this.addressInput = document.getElementById('address');
         this.orderNotesInput = document.getElementById('order-notes');
         
         this.imageUploadArea = document.getElementById('image-upload-area');
@@ -37,16 +39,49 @@ class OrderForm {
             phoneNumber: document.getElementById('error-phone-number'),
             orderDate: document.getElementById('error-order-date'),
             orderTime: document.getElementById('error-order-time'),
+            weight: document.getElementById('error-weight'),
+            address: document.getElementById('error-address'),
             image: document.getElementById('error-image')
         };
+        
+        // Debug: Check if all form elements exist
+        console.log('Form elements check:', {
+            form: !!this.form,
+            customerNameInput: !!this.customerNameInput,
+            phoneNumberInput: !!this.phoneNumberInput,
+            submitBtn: !!this.submitBtn,
+            cancelBtn: !!this.cancelBtn,
+            errorElements: {
+                customerName: !!this.errors.customerName,
+                phoneNumber: !!this.errors.phoneNumber,
+                orderDate: !!this.errors.orderDate,
+                orderTime: !!this.errors.orderTime,
+                image: !!this.errors.image
+            }
+        });
     }
 
     attachEventListeners() {
         // Form submission
         this.form.addEventListener('submit', (e) => {
+            console.log('Form submit event fired');
             e.preventDefault();
+            e.stopPropagation();
             this.handleSubmit();
         });
+
+        // Submit button click
+        if (this.submitBtn) {
+            this.submitBtn.addEventListener('click', (e) => {
+                console.log('Submit button clicked');
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleSubmit();
+            });
+            console.log('Submit button event listener attached');
+        } else {
+            console.error('Submit button not found!');
+        }
 
         // Cancel button
         this.cancelBtn.addEventListener('click', () => {
@@ -77,7 +112,8 @@ class OrderForm {
         });
 
         // Image upload events
-        this.selectImageBtn.addEventListener('click', () => {
+        this.selectImageBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent bubbling to upload area
             this.selectImage();
         });
 
@@ -102,9 +138,10 @@ class OrderForm {
             this.handleImageDrop(e);
         });
 
-        // Click to select image
+        // Click to select image (only for upload area, not button)
         this.imageUploadArea.addEventListener('click', (e) => {
-            if (e.target === this.imageUploadArea || this.uploadPlaceholder.contains(e.target)) {
+            // Only trigger if clicking the upload area itself, not the button
+            if (e.target === this.imageUploadArea || (this.uploadPlaceholder.contains(e.target) && e.target !== this.selectImageBtn)) {
                 this.selectImage();
             }
         });
@@ -211,14 +248,19 @@ class OrderForm {
 
     validatePhoneNumber() {
         const value = this.phoneNumberInput.value.trim();
+        
         if (!Helpers.validateRequired(value)) {
             this.showError('phoneNumber', 'Phone number is required');
             return false;
         }
-        if (!Helpers.validatePhone(value)) {
-            this.showError('phoneNumber', 'Please enter a valid phone number');
+        
+        const isValidPhone = Helpers.validatePhone(value);
+        
+        if (!isValidPhone) {
+            this.showError('phoneNumber', 'Please enter a valid Indian phone number (mobile: 6-9 digits, landline: 2-9 digits with/without STD code)');
             return false;
         }
+        
         this.clearError('phoneNumber');
         return true;
     }
@@ -244,10 +286,7 @@ class OrderForm {
     }
 
     validateImage() {
-        if (!this.selectedImage && !this.selectedImagePath) {
-            this.showError('image', 'Requirements image is required');
-            return false;
-        }
+        // Image is now optional, always return true
         this.clearError('image');
         return true;
     }
@@ -257,17 +296,25 @@ class OrderForm {
             this.validateCustomerName(),
             this.validatePhoneNumber(),
             this.validateOrderDate(),
-            this.validateOrderTime(),
-            this.validateImage()
+            this.validateOrderTime()
         ];
 
         return validations.every(isValid => isValid);
     }
 
     showError(field, message) {
+        console.log('showError called:', field, message);
         if (this.errors[field]) {
+            console.log('Error element found for', field, '- showing error');
             this.errors[field].textContent = message;
             this.errors[field].style.display = 'block';
+            // Add error styling to input field
+            const input = this[field + 'Input'] || this.form.querySelector(`[name="${field}"]`);
+            if (input) {
+                input.classList.add('error');
+            }
+        } else {
+            console.error('Error element not found for field:', field);
         }
     }
 
@@ -275,6 +322,11 @@ class OrderForm {
         if (this.errors[field]) {
             this.errors[field].textContent = '';
             this.errors[field].style.display = 'none';
+            // Remove error styling from input field
+            const input = this[field + 'Input'] || this.form.querySelector(`[name="${field}"]`);
+            if (input) {
+                input.classList.remove('error');
+            }
         }
     }
 
@@ -299,48 +351,49 @@ class OrderForm {
         this.submitBtn.textContent = 'Adding Order...';
 
         try {
+            // Save image first if selected
+            let imagePath = null;
+            if (this.selectedImage) {
+                const imageData = await Helpers.blobToBase64(this.selectedImage);
+                const saveResult = await Helpers.ipcInvoke('save-image', imageData, null);
+                if (!saveResult.success) {
+                    throw new Error(saveResult.error || 'Failed to save image');
+                }
+                imagePath = saveResult.imagePath;
+            } else if (this.selectedImagePath) {
+                const saveResult = await Helpers.ipcInvoke('save-image', this.selectedImagePath, null);
+                if (!saveResult.success) {
+                    throw new Error(saveResult.error || 'Failed to save image');
+                }
+                imagePath = saveResult.imagePath;
+            }
+
             // Prepare order data
             const orderData = {
                 customerName: this.customerNameInput.value.trim(),
                 phoneNumber: this.phoneNumberInput.value.trim(),
                 orderDate: this.orderDateInput.value,
                 orderTime: this.orderTimeInput.value,
-                orderNotes: this.orderNotesInput.value.trim()
+                weight: this.weightInput.value.trim(),
+                address: this.addressInput.value.trim(),
+                orderNotes: this.orderNotesInput.value.trim(),
+                imagePath: imagePath
             };
 
-            // Add order to database first
+            // Add order to database
+            console.log('Making IPC call to add-order with data:', orderData);
             const addResult = await Helpers.ipcInvoke('add-order', orderData);
+            console.log('IPC call result:', addResult);
             
             if (!addResult.success) {
+                console.error('Add order failed:', addResult.error);
                 throw new Error(addResult.error || 'Failed to add order');
             }
 
             const orderId = addResult.orderId;
+            console.log('Order added successfully with ID:', orderId);
 
-            // Save image
-            let imagePath;
-            if (this.selectedImage) {
-                const imageData = await Helpers.blobToBase64(this.selectedImage);
-                const saveResult = await Helpers.ipcInvoke('save-image', imageData, orderId);
-                if (!saveResult.success) {
-                    throw new Error(saveResult.error || 'Failed to save image');
-                }
-                imagePath = saveResult.imagePath;
-            } else if (this.selectedImagePath) {
-                const saveResult = await Helpers.ipcInvoke('save-image', this.selectedImagePath, orderId);
-                if (!saveResult.success) {
-                    throw new Error(saveResult.error || 'Failed to save image');
-                }
-                imagePath = saveResult.imagePath;
-            }
-
-            // Update order with image path
-            if (imagePath) {
-                orderData.imagePath = imagePath;
-                orderData.id = orderId;
-            }
-
-            notifications.success('Order added successfully!');
+            // Order added successfully - no notification needed
             
             // Dispatch event to refresh orders view
             const event = new CustomEvent('orderAdded', { 
@@ -388,6 +441,8 @@ class OrderForm {
         return (
             this.customerNameInput.value.trim() ||
             this.phoneNumberInput.value.trim() ||
+            this.weightInput.value.trim() ||
+            this.addressInput.value.trim() ||
             this.orderNotesInput.value.trim() ||
             this.selectedImage ||
             this.selectedImagePath

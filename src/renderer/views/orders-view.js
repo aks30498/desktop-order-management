@@ -209,7 +209,7 @@ class OrdersView {
                 // Update stats
                 this.updateStats();
 
-                notifications.success(`Order marked as ${newStatus}`);
+                // Status updated - no notification needed
             } else {
                 throw new Error(result.error || 'Failed to update status');
             }
@@ -283,7 +283,7 @@ class OrdersView {
         try {
             await this.loadOrders();
             await this.updateStats();
-            notifications.success('Orders refreshed');
+            // Orders refreshed - no notification needed
         } catch (error) {
             console.error('Error refreshing orders:', error);
             notifications.error('Failed to refresh orders');
@@ -339,7 +339,7 @@ class OrdersView {
     }
 
     showOrders(show) {
-        this.ordersContainer.style.display = show ? 'grid' : 'none';
+        this.ordersContainer.style.display = show ? 'table-row-group' : 'none';
     }
 
     // Public method to refresh from external sources
@@ -349,11 +349,22 @@ class OrdersView {
 
     // Public method to add new order to view
     addOrder(order) {
-        this.orders.unshift(order);
-        this.applyFiltersAndSort();
-        this.renderOrders();
-        this.updatePagination();
-        this.updateStats();
+        try {
+            console.log('addOrder called with:', order);
+            if (!this.orders) {
+                console.error('this.orders is undefined, initializing...');
+                this.orders = [];
+            }
+            this.orders.unshift(order);
+            this.applyFiltersAndSort();
+            this.renderOrders();
+            this.updatePagination();
+            this.updateStats();
+        } catch (error) {
+            console.error('Error in addOrder:', error);
+            // Fall back to refreshing the entire view
+            this.refresh();
+        }
     }
 }
 

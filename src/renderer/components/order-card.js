@@ -7,49 +7,41 @@ class OrderCard {
     }
 
     render() {
-        const card = document.createElement('div');
-        card.className = 'order-card';
-        card.dataset.orderId = this.order.id;
+        const row = document.createElement('tr');
+        row.className = 'order-row';
+        row.dataset.orderId = this.order.id;
 
-        card.innerHTML = `
-            <div class="order-card-header">
-                <span class="order-id">Order #${this.order.id}</span>
-                <span class="order-status ${this.order.status}">${this.order.status}</span>
-            </div>
-            
-            <div class="order-customer">${Helpers.sanitizeHtml(this.order.customer_name)}</div>
-            <div class="order-phone">${Helpers.sanitizeHtml(this.order.phone_number)}</div>
-            
-            <div class="order-date-time">
-                <span>${Helpers.formatDate(this.order.order_date)}</span>
-                <span>${Helpers.formatTime(this.order.order_time)}</span>
-            </div>
-            
-            <div class="order-day">${this.order.day_of_week}</div>
-            
-            ${this.order.order_notes ? `
-                <div class="order-notes">
-                    ${Helpers.sanitizeHtml(this.order.order_notes)}
+        row.innerHTML = `
+            <td class="order-id">#${this.order.id}</td>
+            <td class="order-customer">${Helpers.sanitizeHtml(this.order.customer_name)}</td>
+            <td class="order-phone">${Helpers.sanitizeHtml(this.order.phone_number)}</td>
+            <td class="order-date">${Helpers.formatDate(this.order.order_date)}</td>
+            <td class="order-time">${Helpers.formatTime(this.order.order_time)}</td>
+            <td class="order-status ${this.order.status}">${this.order.status}</td>
+            <td class="image-cell">
+                ${this.order.image_path ? 
+                    `<button class="btn-link btn-view-image" data-action="view-image">View Image</button>` : 
+                    '-'
+                }
+            </td>
+            <td class="table-actions">
+                <div class="table-actions">
+                    <button class="btn-link btn-view" data-action="view">View</button>
+                    <button class="btn-link btn-status" data-action="status">
+                        ${this.order.status === 'pending' ? 'Mark Complete' : 'Mark Pending'}
+                    </button>
                 </div>
-            ` : ''}
-            
-            <div class="order-actions">
-                <button class="btn btn-primary btn-view" data-action="view">
-                    View Details
-                </button>
-                <button class="btn btn-secondary btn-status" data-action="status">
-                    ${this.order.status === 'pending' ? 'Mark Complete' : 'Mark Pending'}
-                </button>
-            </div>
+            </td>
         `;
 
-        this.attachEventListeners(card);
-        return card;
+        this.attachEventListeners(row);
+        return row;
     }
 
     attachEventListeners(card) {
         const viewBtn = card.querySelector('.btn-view');
         const statusBtn = card.querySelector('.btn-status');
+        const viewImageBtn = card.querySelector('.btn-view-image');
 
         // View details
         viewBtn.addEventListener('click', (e) => {
@@ -58,6 +50,17 @@ class OrderCard {
                 this.onView(this.order);
             }
         });
+
+        // View image
+        if (viewImageBtn) {
+            viewImageBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.order.image_path) {
+                    // Open image in a new window or modal
+                    window.open(this.order.image_path, '_blank');
+                }
+            });
+        }
 
         // Toggle status
         statusBtn.addEventListener('click', async (e) => {
@@ -80,12 +83,7 @@ class OrderCard {
             }
         });
 
-        // Card click for view details
-        card.addEventListener('click', () => {
-            if (this.onView) {
-                this.onView(this.order);
-            }
-        });
+        // Remove row click handler - only explicit View button should trigger view
     }
 
     update(order) {

@@ -47,6 +47,10 @@ class OrderDetail {
     hide() {
         this.detailView.classList.add('hidden');
         this.currentOrder = null;
+        
+        // Dispatch event to return to orders view
+        const event = new CustomEvent('closeOrderDetail');
+        document.dispatchEvent(event);
     }
 
     async renderOrderDetail() {
@@ -55,92 +59,93 @@ class OrderDetail {
         const order = this.currentOrder;
 
         this.detailContent.innerHTML = `
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <div class="detail-label">Order ID</div>
-                    <div class="detail-value">#${order.id}</div>
-                </div>
+        <div class="order-detail">
 
-                <div class="detail-item">
-                    <div class="detail-label">Status</div>
-                    <div class="detail-value">
-                        <span class="order-status ${order.status}">${order.status}</span>
-                        <button class="btn btn-secondary btn-small" id="toggle-status-btn" style="margin-left: 12px;">
-                            ${order.status === 'pending' ? 'Mark Complete' : 'Mark Pending'}
-                        </button>
-                    </div>
+            <!-- Top summary -->
+            <div class="detail-summary">
+                <div class="summary-left">
+                    <h2>Order #${order.id}</h2>                    
                 </div>
-
-                <div class="detail-item">
-                    <div class="detail-label">Customer Name</div>
-                    <div class="detail-value">${Helpers.sanitizeHtml(order.customer_name)}</div>
+                <div class="summary-right">
+                    <span>${Helpers.formatDate(order.order_date)} • 
+                        ${Helpers.formatTime(order.order_time)} • 
+                        ${Helpers.getDayOfWeek(order.order_date)}
+                    </span>
                 </div>
+            </div>
 
-                <div class="detail-item">
-                    <div class="detail-label">Phone Number</div>
-                    <div class="detail-value">
-                        ${Helpers.sanitizeHtml(order.phone_number)}
-                        <button class="btn btn-link btn-small" id="copy-phone-btn" style="margin-left: 8px;" title="Copy phone number">
-                            📋
-                        </button>
-                    </div>
+            <!-- Customer Info -->
+            <div class="customer-info">
+                <div class="customer-item">
+                    <span class="customer-label">Customer:</span>
+                    <span class="customer-name">${Helpers.sanitizeHtml(order.customer_name)}</span>
                 </div>
-
-                <div class="detail-item">
-                    <div class="detail-label">Order Date</div>
-                    <div class="detail-value">${Helpers.formatDate(order.order_date)}</div>
+                <div class="customer-item">
+                    <span class="customer-label">Phone:</span>
+                    <span class="customer-phone">${Helpers.sanitizeHtml(order.phone_number)}</span>
                 </div>
-
-                <div class="detail-item">
-                    <div class="detail-label">Order Time</div>
-                    <div class="detail-value">${Helpers.formatTime(order.order_time)}</div>
-                </div>
-
-                <div class="detail-item">
-                    <div class="detail-label">Day of Week</div>
-                    <div class="detail-value">${order.day_of_week}</div>
-                </div>
-
-                <div class="detail-item">
-                    <div class="detail-label">Created</div>
-                    <div class="detail-value">${Helpers.getRelativeTime(order.created_at)}</div>
-                </div>
-
-                ${order.order_notes ? `
-                    <div class="detail-item detail-notes">
-                        <div class="detail-label">Order Notes</div>
-                        <div class="detail-value">${Helpers.sanitizeHtml(order.order_notes)}</div>
+                ${order.weight ? `
+                    <div class="customer-item">
+                        <span class="customer-label">Weight:</span>
+                        <span class="customer-weight">${Helpers.sanitizeHtml(order.weight)}</span>
                     </div>
                 ` : ''}
-
-                <div class="detail-item detail-image">
-                    <div class="detail-label">Requirements Image</div>
-                    <div class="detail-value">
-                        ${order.image_path ? `
-                            <img src="file://${order.image_path}" alt="Requirements" onclick="this.requestFullscreen()" style="cursor: zoom-in;" title="Click to view fullscreen">
-                            <div class="image-actions" style="margin-top: 12px;">
-                                <button class="btn btn-secondary btn-small" id="fullscreen-image-btn">View Fullscreen</button>
-                                <button class="btn btn-secondary btn-small" id="copy-image-path-btn">Copy Path</button>
-                            </div>
-                        ` : '<span class="text-muted">No image available</span>'}
+                ${order.address ? `
+                    <div class="customer-item">
+                        <span class="customer-label">Address:</span>
+                        <span class="customer-address">${Helpers.sanitizeHtml(order.address)}</span>
                     </div>
-                </div>
+                ` : ''}
+            </div>
 
-                <div class="detail-item">
-                    <div class="detail-label">Barcode</div>
+            <!-- Notes -->
+            ${order.order_notes ? `
+                <div class="detail-section">
+                    <div class="detail-label">Notes</div>
+                    <div class="detail-value">${Helpers.sanitizeHtml(order.order_notes)}</div>
+                </div>
+            ` : ''}
+
+            <!-- Image + Barcode (only if image exists) -->
+            ${order.image_path ? `
+                <div class="detail-section">
+                    <div class="detail-label">Requirements</div>
                     <div class="detail-value">
+                        <div class="image-container">
+                            <img src="file://${order.image_path}" alt="Requirements"
+                                class="detail-image"
+                                id="detail-image-${order.id}">
+                        </div>
+
+                        <div class="image-actions">
+                            <button class="btn btn-secondary btn-small" id="fullscreen-image-btn">View Fullscreen</button>
+                        </div>
+
+                        <!-- Barcode only if image is uploaded -->
                         <div class="detail-barcode">
-                            <div class="barcode-code" id="barcode-code-container">
-                                <div id="barcode-code-${order.id}"></div>
-                                <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                                    Order #${order.id}
-                                </div>
+                            <div id="barcode-code-${order.id}"></div>
+                            <div class="barcode-caption">
+                                Order #${order.id} - Scan for quick identification
                             </div>
                         </div>
                     </div>
                 </div>
+            ` : ''}
+
+
+            <!-- Actions -->
+            <div class="detail-actions">
+                <button class="btn btn-primary" id="toggle-status-btn">
+                    ${order.status === 'pending' ? 'Mark as Complete' : 'Mark as Pending'}
+                </button>
+                <button class="btn btn-secondary" id="preview-pdf-btn">
+                    <span class="icon">picture_as_pdf</span>
+                    Preview PDF
+                </button>
             </div>
-        `;
+        </div>
+`;
+
 
         // Generate barcode
         await this.generateBarcode(order);
@@ -200,7 +205,12 @@ class OrderDetail {
         // Toggle status button
         const toggleStatusBtn = document.getElementById('toggle-status-btn');
         if (toggleStatusBtn) {
-            toggleStatusBtn.addEventListener('click', async () => {
+            // Remove any existing listeners by cloning the element
+            const newBtn = toggleStatusBtn.cloneNode(true);
+            toggleStatusBtn.parentNode.replaceChild(newBtn, toggleStatusBtn);
+            
+            // Add fresh listener to the new element
+            newBtn.addEventListener('click', async () => {
                 await this.handleStatusToggle(order);
             });
         }
@@ -208,7 +218,11 @@ class OrderDetail {
         // Copy phone button
         const copyPhoneBtn = document.getElementById('copy-phone-btn');
         if (copyPhoneBtn) {
-            copyPhoneBtn.addEventListener('click', () => {
+            // Remove any existing listeners by cloning the element
+            const newCopyBtn = copyPhoneBtn.cloneNode(true);
+            copyPhoneBtn.parentNode.replaceChild(newCopyBtn, copyPhoneBtn);
+            
+            newCopyBtn.addEventListener('click', () => {
                 this.copyPhoneNumber(order.phone_number);
             });
         }
@@ -216,16 +230,39 @@ class OrderDetail {
         // Fullscreen image button
         const fullscreenBtn = document.getElementById('fullscreen-image-btn');
         if (fullscreenBtn) {
-            fullscreenBtn.addEventListener('click', () => {
+            // Remove any existing listeners by cloning the element
+            const newFullscreenBtn = fullscreenBtn.cloneNode(true);
+            fullscreenBtn.parentNode.replaceChild(newFullscreenBtn, fullscreenBtn);
+            
+            newFullscreenBtn.addEventListener('click', () => {
                 this.viewImageFullscreen(order.image_path);
             });
         }
 
-        // Copy image path button
-        const copyImagePathBtn = document.getElementById('copy-image-path-btn');
-        if (copyImagePathBtn) {
-            copyImagePathBtn.addEventListener('click', () => {
-                this.copyImagePath(order.image_path);
+        // Image click to open fullscreen
+        const detailImage = document.getElementById(`detail-image-${order.id}`);
+        if (detailImage) {
+            // Remove any existing listeners by cloning the element
+            const newImage = detailImage.cloneNode(true);
+            detailImage.parentNode.replaceChild(newImage, detailImage);
+            
+            newImage.addEventListener('click', () => {
+                this.viewImageFullscreen(order.image_path);
+            });
+            
+            // Add cursor pointer style
+            newImage.style.cursor = 'pointer';
+        }
+
+        // Preview PDF button
+        const previewPdfBtn = document.getElementById('preview-pdf-btn');
+        if (previewPdfBtn) {
+            // Remove any existing listeners by cloning the element
+            const newPreviewBtn = previewPdfBtn.cloneNode(true);
+            previewPdfBtn.parentNode.replaceChild(newPreviewBtn, previewPdfBtn);
+            
+            newPreviewBtn.addEventListener('click', async () => {
+                await this.handlePreviewPDF(order);
             });
         }
     }
@@ -286,22 +323,46 @@ class OrderDetail {
             justify-content: center;
             align-items: center;
             z-index: 10000;
+        `;
+
+        // Create close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '×';
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            color: #333;
+            font-size: 30px;
+            font-weight: bold;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            transition: background 0.2s ease;
         `;
 
         const img = document.createElement('img');
         img.src = `file://${imagePath}`;
         img.style.cssText = `
-            max-width: 95%;
-            max-height: 95%;
+            max-width: 90%;
+            max-height: 90%;
             object-fit: contain;
             border-radius: 8px;
+            cursor: default;
         `;
 
         overlay.appendChild(img);
+        overlay.appendChild(closeBtn);
         document.body.appendChild(overlay);
 
-        // Close on click or escape
+        // Close functionality
         const closeFullscreen = () => {
             document.body.removeChild(overlay);
             document.removeEventListener('keydown', handleEscape);
@@ -313,8 +374,20 @@ class OrderDetail {
             }
         };
 
-        overlay.addEventListener('click', closeFullscreen);
+        // Close on button click, overlay click (but not image), or escape key
+        closeBtn.addEventListener('click', closeFullscreen);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeFullscreen();
+        });
         document.addEventListener('keydown', handleEscape);
+
+        // Hover effect for close button
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.background = 'rgba(255, 255, 255, 1)';
+        });
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.background = 'rgba(255, 255, 255, 0.9)';
+        });
     }
 
     async copyImagePath(imagePath) {
@@ -349,6 +422,32 @@ class OrderDetail {
         } finally {
             this.printBtn.disabled = false;
             this.printBtn.textContent = 'Print Slips';
+        }
+    }
+
+    async handlePreviewPDF(order) {
+        const previewBtn = document.getElementById('preview-pdf-btn');
+        if (!previewBtn) return;
+
+        try {
+            previewBtn.disabled = true;
+            previewBtn.innerHTML = '<span class="icon">hourglass_empty</span>Generating...';
+
+            const result = await Helpers.ipcInvoke('generate-order-pdf', order.id);
+            
+            if (result.success) {
+                // Open the generated PDF
+                await Helpers.ipcInvoke('open-file', result.pdfPath);
+                notifications.success('PDF generated and opened');
+            } else {
+                throw new Error(result.error || 'Failed to generate PDF');
+            }
+        } catch (error) {
+            console.error('Error generating PDF preview:', error);
+            notifications.error('Failed to generate PDF preview');
+        } finally {
+            previewBtn.disabled = false;
+            previewBtn.innerHTML = '<span class="icon">picture_as_pdf</span>Preview PDF';
         }
     }
 }

@@ -132,7 +132,7 @@ src/
 - **Order Date** (required, auto-filled with current date)
 - **Order Time** (required, auto-filled with current time in 12-hour format)
 - **Order Notes** (optional, textarea)
-- **Requirements Image** (required, drag-and-drop or file picker)
+- **Requirements Image** (optional, drag-and-drop or file picker)
 
 ### 🔄 Views & Navigation
 - **Orders View**: Grid of order cards with sorting and filtering

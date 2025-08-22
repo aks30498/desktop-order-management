@@ -469,6 +469,11 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Icons in primary buttons should be white */
+.btn-primary .icon {
+    color: white;
+}
+
 /* Material Design Form Elements */
 .search-container {
     position: relative;

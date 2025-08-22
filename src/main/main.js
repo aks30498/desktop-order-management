@@ -295,6 +295,49 @@ class OrderManagementApp {
       }
     });
 
+    // Generate PDF preview of order slips
+    ipcMain.handle('generate-order-pdf', async (event, orderId) => {
+      try {
+        const order = await database.getOrderById(orderId);
+        if (!order) {
+          throw new Error('Order not found');
+        }
+        
+        const { app } = require('electron');
+        const path = require('path');
+        const outputPath = path.join(app.getPath('temp'), `order-${orderId}-slips.pdf`);
+        
+        await printService.printToPDF(order, outputPath);
+        return { success: true, pdfPath: outputPath };
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Open file with default system application
+    ipcMain.handle('open-file', async (event, filePath) => {
+      try {
+        const { shell } = require('electron');
+        await shell.openPath(filePath);
+        return { success: true };
+      } catch (error) {
+        console.error('Error opening file:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Clear all database data
+    ipcMain.handle('clear-all-data', async () => {
+      try {
+        const result = await database.clearAllData();
+        return result;
+      } catch (error) {
+        console.error('Error clearing database:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle('print-to-pdf', async (event, orderId, outputPath) => {
       try {
         const order = await database.getOrderById(orderId);
