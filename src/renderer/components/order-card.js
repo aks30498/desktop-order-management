@@ -74,6 +74,13 @@ class OrderCard {
                 if (this.onStatusChange) {
                     await this.onStatusChange(this.order.id, newStatus);
                 }
+                
+                // Update the order object with the new status
+                this.order.status = newStatus;
+                    
+                // Update both the status cell and button
+                this.update(this.order);
+
             } catch (error) {
                 console.error('Failed to update status:', error);
                 notifications.error('Failed to update order status');
