@@ -7,6 +7,7 @@ class OrdersView {
         this.totalPages = 1;
         this.currentSearch = '';
         this.currentStatusFilter = '';
+        this.currentPaymentStatusFilter = '';
         this.orders = [];
         this.filteredOrders = [];
         
@@ -26,6 +27,7 @@ class OrdersView {
         this.noOrdersElement = document.getElementById('no-orders');
         this.searchInput = document.getElementById('search-input');
         this.statusFilter = document.getElementById('status-filter');
+        this.paymentStatusFilter = document.getElementById('payment-status-filter');
         this.sortSelect = document.getElementById('sort-select');
         this.tabButtons = document.querySelectorAll('.tab');
         this.refreshBtn = document.getElementById('btn-refresh');
@@ -60,6 +62,11 @@ class OrdersView {
         this.statusFilter.addEventListener('change', () => {
             this.handleStatusFilter();
         });
+
+        // Payment status filter
+        this.paymentStatusFilter.addEventListener('change', () => {
+            this.handlePaymentStatusFilter();
+        })
 
         // Sort
         this.sortSelect.addEventListener('change', () => {
@@ -106,8 +113,8 @@ class OrdersView {
                 case 'week':
                     result = await Helpers.ipcInvoke('get-weeks-orders');
                     break;
-                case 'completed':
-                    result = await Helpers.ipcInvoke('get-orders', { status: 'completed' });
+                case 'delivered':
+                    result = await Helpers.ipcInvoke('get-orders', { status: 'delivered' });
                     break;
                 case 'pending':
                     result = await Helpers.ipcInvoke('get-orders', { status: 'pending' });
@@ -151,6 +158,11 @@ class OrdersView {
             filtered = filtered.filter(order => order.status === this.currentStatusFilter);
         }
 
+        // Apply payment status filter
+        if (this.currentPaymentStatusFilter) {
+            filtered = filtered.filter(order => order.payment_status === this.currentPaymentStatusFilter);
+        }
+
         // Apply sorting
         filtered = Helpers.sortOrders(filtered, this.currentSort);
 
@@ -176,7 +188,7 @@ class OrdersView {
         this.ordersContainer.innerHTML = '';
 
         pageOrders.forEach(order => {
-            const card = new OrderCard(order, null, this.handleStatusChange.bind(this), this.handleViewOrder.bind(this));
+            const card = new OrderCard(order, null, this.handleStatusChange.bind(this), this.handlePaymentStatusChange.bind(this) , this.handleViewOrder.bind(this));
             this.ordersContainer.appendChild(card.render());
         });
     }
@@ -201,15 +213,13 @@ class OrdersView {
                 }
 
                 // Re-render if we're on a status-specific tab
-                if (this.currentTab === 'completed' || this.currentTab === 'pending') {
+                if (this.currentTab === 'delivered' || this.currentTab === 'pending') {
                     this.applyFiltersAndSort();
                     this.renderOrders();
                 }
 
                 // Update stats
-                this.updateStats();
-
-                // Status updated - no notification needed
+                this.updateStats();                
             } else {
                 throw new Error(result.error || 'Failed to update status');
             }
@@ -219,6 +229,34 @@ class OrdersView {
             throw error;
         }
     }
+
+    async handlePaymentStatusChange(orderId, newPaymentStatus) {
+    try {
+        const result = await Helpers.ipcInvoke('update-payment-status', orderId, newPaymentStatus);
+
+        if (result.success) {
+            // Update local order payment status
+            const order = this.orders.find(o => o.id === orderId);
+            if (order) {
+                order.payment_status = newPaymentStatus;
+                order.payment_updated_at = new Date().toISOString();
+            }
+            const filteredOrder = this.filteredOrders.find(o => o.id === orderId);
+            if (filteredOrder) {
+                filteredOrder.payment_status = newPaymentStatus;
+                filteredOrder.updated_at = new Date().toISOString();
+            }
+            this.refresh()
+        } else {
+            throw new Error(result.error || 'Failed to update payment status');
+        }
+    } catch (error) {
+        console.error('Error updating payment status:', error);
+        notifications.error('Failed to update payment status');
+        throw error;
+    }
+}
+
 
     handleViewOrder(order) {
         // Dispatch custom event for order view
@@ -250,6 +288,14 @@ class OrdersView {
 
     handleStatusFilter() {
         this.currentStatusFilter = this.statusFilter.value;
+        this.currentPage = 1;
+        this.applyFiltersAndSort();
+        this.renderOrders();
+        this.updatePagination();
+    }
+
+    handlePaymentStatusFilter() {
+        this.currentPaymentStatusFilter = this.paymentStatusFilter.value;
         this.currentPage = 1;
         this.applyFiltersAndSort();
         this.renderOrders();

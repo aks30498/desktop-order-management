@@ -13,29 +13,44 @@ class PrintService {
     }
 
     async printOrderSlips(order, copies = 2) {
-        try {
-            console.log(`Printing ${copies} copies of order slips for order #${order.id}`);
-            
-            // Generate barcode for the order
-            const barcode = await barcodeService.createPrintableBarcode(order, 250, 60);
-            
-            // Create simple print HTML without external dependencies
-            const printHTML = this.generateSimplePrintHTML(order, barcode, null);
-            
-            // Create print window
-            await this.createSimplePrintWindow();
-            
-            // Load content and print
-            await this.loadContentAndPrint(printHTML);
-            
-            console.log('Print dialog opened successfully');
-            return { success: true };
-            
-        } catch (error) {
-            console.error('Error printing order slips:', error);
-            throw error;
+    try {
+        console.log(`Printing ${copies} copies of order slips for order #${order.id}`);
+        
+        // Generate a temporary PDF file for printing
+        const tempDir = path.join(require('os').tmpdir(), 'order-slips');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
         }
+        
+        const tempPdfPath = path.join(tempDir, `order-${order.id}-slips.pdf`);
+        
+        // Generate the PDF using PDFKit (same as preview)
+        await this.generatePDFWithPDFKit(order, tempPdfPath);
+        
+        // Open print dialog with the PDF
+        console.log('Opening print dialog...');
+        await shell.openPath(tempPdfPath);
+        
+        // Optional: Clean up temp file after a delay (give time for print dialog to open)
+        setTimeout(() => {
+            try {
+                if (fs.existsSync(tempPdfPath)) {
+                    fs.unlinkSync(tempPdfPath);
+                    console.log('Temporary PDF cleaned up');
+                }
+            } catch (cleanupError) {
+                console.warn('Could not clean up temporary PDF:', cleanupError);
+            }
+        }, 5000); // 5 second delay
+        
+        console.log('Print dialog opened successfully');
+        return { success: true, path: tempPdfPath };
+        
+    } catch (error) {
+        console.error('Error printing order slips:', error);
+        throw error;
     }
+}
 
     // Full-featured HTML for regular printing (with JsBarcode and images)
     generateFullPrintHTML(order, barcode, copies = 2, imageDataUrl = null) {
@@ -527,120 +542,163 @@ class PrintService {
         `;
     }
 
-    generateSimplePrintHTML(order, barcode, imageDataUrl = null) {
-        const styles = this.getPrintStyles();
-        
-        const slipHTML = `
-            <div class="slip-content">
-                <div class="order-info">
-                    <div class="field">
-                        <label>Order #:</label>
-                        <span class="value">${order.id}</span>
-                    </div>
-                    
-                    <div class="field">
-                        <label>Customer:</label>
-                        <span class="value">${this.escapeHtml(order.customer_name)}</span>
-                    </div>
-                    
-                    <div class="field">
-                        <label>Phone:</label>
-                        <span class="value">${this.escapeHtml(order.phone_number)}</span>
-                    </div>
-                    
-                    <div class="field">
-                        <label>Date:</label>
-                        <span class="value">${this.formatDate(order.order_date)}</span>
-                    </div>
-                    
-                    <div class="field">
-                        <label>Time:</label>
-                        <span class="value">${this.formatTime(order.order_time)}</span>
-                    </div>
-                    
-                    <div class="field">
-                        <label>Day:</label>
-                        <span class="value">${this.getDayOfWeek(order.order_date)}</span>
-                    </div>
-                    
-                    ${order.order_notes ? `
-                        <div class="field notes">
-                            <label>Notes:</label>
-                            <span class="value">${this.escapeHtml(order.order_notes)}</span>
-                        </div>
-                    ` : ''}
-                </div>
-                
-                ${imageDataUrl ? `
-                    <div class="image-section">
-                        <div class="image-container">
-                            <label>Requirements:</label>
-                            <img src="${imageDataUrl}" alt="Requirements" class="order-image">
-                        </div>
-                    </div>
-                ` : ''}
-                
-                <div class="barcode-section">
-                    <div class="barcode-container">
-                        <div class="simple-barcode">${barcode.value}</div>
-                    </div>
-                </div>
-                
-                <div class="footer">
-                    <div class="timestamp">Generated: ${new Date().toLocaleString()}</div>
-                    <div class="business-info">Desktop Order Management System</div>
-                </div>
+    generateSimplePrintHTML(order, barcode, orderDetails) {
+    // Calculate total weight from order details
+    const totalWeight = orderDetails.reduce((sum, detail) => {
+        return sum + (parseFloat(detail.weight) || 0);
+    }, 0);
+    
+    const slipHTML = `
+        <div class="thermal-slip-content">
+            <div class="barcode-section">
+                <div class="barcode">${barcode.value}</div>
             </div>
-        `;
-        
-        const customerCopy = `
-            <div class="slip customer-copy">
-                <div class="slip-header">
-                    <h2>CUSTOMER COPY</h2>
-                </div>
-                ${slipHTML}
+            
+            <div class="order-id">
+                #${order.id}
+            </div>88
+            
+            <div class="info-line">
+                ${this.formatDate(order.order_date)} ${this.formatTime(order.order_time)}
             </div>
-        `;
-        
-        const businessCopy = `
-            <div class="slip business-copy">
-                <div class="slip-header">
-                    <h2>BUSINESS COPY</h2>
-                </div>
-                ${slipHTML}
+            
+            <div class="info-line">
+                ${this.escapeHtml(order.customer_name)}
             </div>
-        `;
-        
-        return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Order Slips - Order #${order.id}</title>
-                ${styles}
-                <style>
-                    .simple-barcode {
-                        border: 2px solid #000;
-                        padding: 8px 12px;
-                        font-family: 'Courier New', monospace;
-                        font-weight: bold;
-                        font-size: 14px;
-                        text-align: center;
-                        background: #fff;
-                        letter-spacing: 2px;
-                        margin: 5px 0;
+            
+            <div class="weight-line">
+                Weight: ${order.weight}
+            </div>
+        </div>
+    `;
+    
+    const customerCopy = `
+        <div class="thermal-slip">
+            <div class="copy-label">CUSTOMER</div>
+            ${slipHTML}
+        </div>
+    `;
+    
+    const businessCopy = `
+        <div class="thermal-slip">
+            <div class="copy-label">SHOP</div>
+            ${slipHTML}
+        </div>
+    `;
+    
+    return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Thermal Slip - Order #${order.id}</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                @page {
+                    size: 2in 2in;
+                    margin: 0;
+                }
+                
+                body {
+                    font-family: 'Courier New', monospace;
+                    font-size: 8pt;
+                    line-height: 1.2;
+                    background: white;
+                }
+                
+                .thermal-slip {
+                    width: 2in;
+                    height: 2in;
+                    padding: 0.1in;
+                    page-break-after: always;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                }
+                
+                .thermal-slip:last-child {
+                    page-break-after: auto;
+                }
+                
+                .copy-label {
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 7pt;
+                    border-bottom: 1px dashed #000;
+                    padding-bottom: 2px;
+                    margin-bottom: 4px;
+                }
+                
+                .thermal-slip-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-around;
+                }
+                
+                .barcode-section {
+                    text-align: center;
+                    margin: 3px 0;
+                }
+                
+                .barcode {
+                    border: 1.5px solid #000;
+                    padding: 4px 6px;
+                    font-weight: bold;
+                    font-size: 9pt;
+                    letter-spacing: 1px;
+                    display: inline-block;
+                }
+                
+                .order-id {
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 10pt;
+                    margin: 2px 0;
+                }
+                
+                .info-line {
+                    font-size: 7pt;
+                    text-align: center;
+                    margin: 1px 0;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                
+                .weight-line {
+                    text-align: center;
+                    font-weight: bold;
+                    font-size: 8pt;
+                    margin: 2px 0;
+                    border-top: 1px dashed #000;
+                    padding-top: 2px;
+                }
+                
+                @media print {
+                    body {
+                        background: white;
                     }
-                </style>
-            </head>
-            <body>
-                <div class="print-container">
-                    ${customerCopy}
-                    ${businessCopy}
-                </div>
-            </body>
-            </html>
-        `;
-    }
+                    
+                    .thermal-slip {
+                        box-shadow: none;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${customerCopy}
+            ${businessCopy}
+        </body>
+        </html>
+    `;
+}
 
     async previewPDF(order, previewPath) {
         try {
@@ -799,11 +857,12 @@ class PrintService {
     async generatePDFWithPDFKit(order, outputPath) {
         return new Promise(async (resolve, reject) => {
             try {
-                console.log('Creating professional PDF with PDFKit...');
+                console.log('Creating thermal slip PDF with PDFKit...');
                 
+                // 2x2 inch = 144x144 points (72 points per inch)
                 const doc = new PDFDocument({
-                    size: 'A4',
-                    margin: 40
+                    size: [144, 144],
+                    margin: 7.2 // 0.1 inch margin
                 });
                 
                 // Pipe the document to the output file
@@ -811,7 +870,6 @@ class PrintService {
                 doc.pipe(stream);
                 
                 // Generate barcode with correct server port
-                // Get the current server port from main process or use default
                 const serverPort = global.imageServerPort || 8080;
                 const barcode = await barcodeService.createPrintableBarcode(order, serverPort);
                 
@@ -821,8 +879,8 @@ class PrintService {
                     barcodeBuffer = await bwipjs.toBuffer({
                         bcid: 'code128',
                         text: barcode.value,
-                        scale: 2,
-                        height: 10,
+                        scale: 1,
+                        height: 8,
                         includetext: false,
                         backgroundcolor: 'ffffff',
                         color: '000000'
@@ -831,171 +889,96 @@ class PrintService {
                     console.warn('Barcode generation failed, using text fallback:', error);
                 }
                 
-                // Load order image if exists
-                let imageBuffer = null;
-                if (order.image_path && fs.existsSync(order.image_path)) {
-                    try {
-                        imageBuffer = fs.readFileSync(order.image_path);
-                    } catch (error) {
-                        console.warn('Failed to load order image:', error);
-                    }
-                }
-                
-                // Helper function to add a professional slip
-                const addSlip = async (title, startY) => {
-                    // Title header with background
-                    doc.rect(50, startY, 500, 30).fillAndStroke('#f0f0f0', '#000000');
-                    doc.fillColor('#000000').fontSize(14).font('Helvetica-Bold')
-                       .text(title, 50, startY + 8, { align: 'center', width: 500 });
+                // Helper function to add a thermal slip
+                const addSlip = async (title) => {
+                    let currentY = 10;
                     
-                    let currentY = startY + 45;
+                    // Title header
+                    doc.fontSize(6).font('Courier-Bold')
+                       .text(title, 10, currentY, { align: 'center', width: 124 });
                     
-                    // Order information section
-                    doc.fontSize(10).font('Helvetica-Bold')
-                       .text('ORDER INFORMATION', 60, currentY);
-                    currentY += 20;
+                    // Dashed line
+                    currentY += 10;
+                    doc.moveTo(10, currentY).lineTo(134, currentY).dash(1, { space: 2 }).stroke();
+                    doc.undash();
+                    currentY += 5;
                     
-                    // Order details with proper spacing
-                    const leftColumn = [
-                        ['Order #:', order.id],
-                        ['Date:', this.formatDate(order.order_date)],
-                        ['Time:', this.formatTime(order.order_time)],
-                        ['Day:', this.getDayOfWeek(order.order_date)]
-                    ];
-                    
-                    const rightColumn = [
-                        ['Customer:', order.customer_name],
-                        ['Phone:', order.phone_number],
-                        ...(order.weight ? [['Weight:', order.weight]] : []),
-                        ...(order.address ? [['Address:', order.address]] : [])
-                    ];
-                    
-                    // Left column
-                    let leftY = currentY;
-                    leftColumn.forEach(([label, value]) => {
-                        doc.font('Helvetica-Bold').fontSize(9)
-                           .text(label, 60, leftY, { width: 80, continued: false });
-                        doc.font('Helvetica').fontSize(9)
-                           .text(String(value), 140, leftY, { width: 140 });
-                        leftY += 15;
-                    });
-                    
-                    // Right column
-                    let rightY = currentY;
-                    rightColumn.forEach(([label, value]) => {
-                        doc.font('Helvetica-Bold').fontSize(9)
-                           .text(label, 300, rightY, { width: 80, continued: false });
-                        doc.font('Helvetica').fontSize(9)
-                           .text(String(value), 380, rightY, { width: 160 });
-                        rightY += 15;
-                    });
-                    
-                    currentY = Math.max(leftY, rightY) + 10;
-                    
-                    // Notes section if exists
-                    if (order.order_notes) {
-                        doc.font('Helvetica-Bold').fontSize(9)
-                           .text('NOTES:', 60, currentY);
-                        currentY += 15;
-                        doc.font('Helvetica').fontSize(9)
-                           .text(order.order_notes, 60, currentY, { 
-                               width: 480, 
-                               align: 'left'
-                           });
-                        currentY += Math.ceil(order.order_notes.length / 80) * 12 + 10;
-                    }
-                    
-                    // Create two columns for image and barcode
-                    const columnY = currentY + 10;
-                    
-                    // Left side - Requirements Image
-                    doc.font('Helvetica-Bold').fontSize(9)
-                       .text('REQUIREMENTS:', 60, columnY);
-                    
-                    if (imageBuffer) {
-                        try {
-                            doc.image(imageBuffer, 60, columnY + 15, {
-                                width: 200,
-                                height: 150,
-                                fit: [200, 150],
-                                align: 'center'
-                            });
-                        } catch (error) {
-                            doc.font('Helvetica').fontSize(8)
-                               .text('Image could not be displayed', 60, columnY + 15, { width: 200 });
-                        }
-                    } else {
-                        doc.rect(60, columnY + 15, 200, 80).stroke();
-                        doc.font('Helvetica').fontSize(8)
-                           .text('No image attached', 60, columnY + 50, { 
-                               width: 200, 
-                               align: 'center' 
-                           });
-                    }
-                    
-                    // Right side - Barcode
-                    doc.font('Helvetica-Bold').fontSize(9)
-                       .text('BARCODE:', 320, columnY);
-                    
+                    // Barcode section
                     if (barcodeBuffer) {
                         try {
-                            doc.image(barcodeBuffer, 320, columnY + 15, {
-                                width: 200,
-                                height: 60
+                            const barcodeWidth = 80;
+                            const barcodeX = (144 - barcodeWidth) / 2;
+                            doc.image(barcodeBuffer, barcodeX, currentY, {
+                                width: barcodeWidth,
+                                height: 20
                             });
-                            // Barcode text
-                            doc.font('Courier').fontSize(8)
-                               .text(barcode.value, 320, columnY + 80, { 
-                                   width: 200, 
-                                   align: 'center' 
-                               });
+                            currentY += 22;
                         } catch (error) {
-                            doc.rect(320, columnY + 15, 200, 60).stroke();
-                            doc.font('Courier').fontSize(10)
-                               .text(barcode.value, 320, columnY + 40, { 
-                                   width: 200, 
-                                   align: 'center' 
+                            // Fallback to text barcode
+                            doc.rect(32, currentY, 80, 12).lineWidth(1.2).stroke();
+                            doc.fontSize(7).font('Courier-Bold')
+                               .text(barcode.value, 10, currentY + 3, { 
+                                   align: 'center', 
+                                   width: 124 
                                });
+                            currentY += 15;
                         }
                     } else {
-                        // Fallback text barcode
-                        doc.rect(320, columnY + 15, 200, 40).stroke();
-                        doc.font('Courier-Bold').fontSize(10)
-                           .text(barcode.value, 320, columnY + 30, { 
-                               width: 200, 
-                               align: 'center' 
+                        // Text barcode fallback
+                        doc.rect(32, currentY, 80, 12).lineWidth(1.2).stroke();
+                        doc.fontSize(7).font('Courier-Bold')
+                           .text(barcode.value, 10, currentY + 3, { 
+                               align: 'center', 
+                               width: 124 
                            });
+                        currentY += 15;
                     }
                     
-                    // Footer
-                    const footerY = columnY + 180;
-                    doc.fontSize(7).font('Helvetica')
-                       .text(`Generated: ${new Date().toLocaleString()}`, 60, footerY)
-                       .text('Desktop Order Management System', 60, footerY + 10);
+                    // Order ID
+                    currentY += 3;
+                    doc.fontSize(9).font('Courier-Bold')
+                       .text(`#${order.id}`, 10, currentY, { align: 'center', width: 124 });
+                    currentY += 12;
                     
-                    // Border around entire slip
-                    doc.rect(50, startY, 500, footerY - startY + 25).stroke();
+                    // Date and Time
+                    const dateTime = `${this.formatDate(order.order_date)} ${this.formatTime(order.order_time)}`;
+                    doc.fontSize(6).font('Courier')
+                       .text(dateTime, 10, currentY, { align: 'center', width: 124 });
+                    currentY += 10;
                     
-                    return footerY + 40;
+                    // Customer Name
+                    const customerName = order.customer_name.length > 20 
+                        ? order.customer_name.substring(0, 20) 
+                        : order.customer_name;
+                    doc.fontSize(6).font('Courier')
+                       .text(customerName, 10, currentY, { align: 'center', width: 124 });
+                    currentY += 10;
+                    
+                    // Weight section with dashed border
+                    currentY += 2;
+                    doc.moveTo(10, currentY).lineTo(134, currentY).dash(1, { space: 2 }).stroke();
+                    doc.undash();
+                    currentY += 4;
+                    
+                    const weight = order.weight || '0';
+                    doc.fontSize(7).font('Courier-Bold')
+                       .text(`Weight: ${weight}`, 10, currentY, { align: 'center', width: 124 });
                 };
                 
                 // Add customer copy
-                let nextY = await addSlip('CUSTOMER COPY', 50);
+                await addSlip('CUSTOMER');
                 
-                // Add page break if needed
-                if (nextY > 600) {
-                    doc.addPage();
-                    nextY = 50;
-                }
+                // Add new page for business copy
+                doc.addPage();
                 
                 // Add business copy
-                await addSlip('BUSINESS COPY', nextY + 30);
+                await addSlip('SHOP');
                 
                 // Finalize the document
                 doc.end();
                 
                 stream.on('finish', () => {
-                    console.log(`Professional PDF created successfully: ${outputPath}`);
+                    console.log(`Thermal slip PDF created successfully: ${outputPath}`);
                     resolve(outputPath);
                 });
                 

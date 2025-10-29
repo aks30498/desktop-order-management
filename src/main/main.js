@@ -228,6 +228,16 @@ class OrderManagementApp {
       }
     });
 
+    ipcMain.handle('update-payment-status', async (event, id, status) => {
+      try {
+        await database.updatePaymentStatus(id, status);
+        return { success: true };
+      } catch (error) {
+        console.error('Error updating order payment status:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle('get-todays-orders', async () => {
       try {
         const orders = await database.getTodaysOrders();

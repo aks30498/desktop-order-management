@@ -1,8 +1,9 @@
 class OrderCard {
-    constructor(order, onEdit, onStatusChange, onView) {
+    constructor(order, onEdit, onStatusChange, onPaymentStatusChange, onView) {
         this.order = order;
         this.onEdit = onEdit;
         this.onStatusChange = onStatusChange;
+        this.onPaymentStatusChange = onPaymentStatusChange;
         this.onView = onView;
     }
 
@@ -18,6 +19,7 @@ class OrderCard {
             <td class="order-date">${Helpers.formatDate(this.order.order_date)}</td>
             <td class="order-time">${Helpers.formatTime(this.order.order_time)}</td>
             <td class="order-status ${this.order.status}">${this.order.status}</td>
+            <td class="order-payment-status ${this.order.payment_status}">${this.order.payment_status}</td>
             <td class="image-cell">
                 ${this.order.image_path ? 
                     `<button class="btn-link btn-view-image" data-action="view-image">View Image</button>` : 
@@ -28,7 +30,10 @@ class OrderCard {
                 <div class="table-actions">
                     <button class="btn-link btn-view" data-action="view">View</button>
                     <button class="btn-link btn-status" data-action="status">
-                        ${this.order.status === 'pending' ? 'Mark Complete' : 'Mark Pending'}
+                        ${this.order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending'}
+                    </button>
+                    <button class="btn-link btn-payment-status" data-action="payment_status">
+                        ${this.order.payment_status === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending'}
                     </button>
                 </div>
             </td>
@@ -42,6 +47,7 @@ class OrderCard {
         const viewBtn = card.querySelector('.btn-view');
         const statusBtn = card.querySelector('.btn-status');
         const viewImageBtn = card.querySelector('.btn-view-image');
+        const paymentStatusBtn = card.querySelector('.btn-payment-status');
 
         // View details
         viewBtn.addEventListener('click', (e) => {
@@ -65,7 +71,7 @@ class OrderCard {
         // Toggle status
         statusBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            const newStatus = this.order.status === 'pending' ? 'completed' : 'pending';
+            const newStatus = this.order.status === 'pending' ? 'delivered' : 'pending';
             
             try {
                 statusBtn.disabled = true;
@@ -86,7 +92,34 @@ class OrderCard {
                 notifications.error('Failed to update order status');
             } finally {
                 statusBtn.disabled = false;
-                statusBtn.textContent = newStatus === 'pending' ? 'Mark Complete' : 'Mark Pending';
+                statusBtn.textContent = newStatus === 'pending' ? 'Mark Delivered' : 'Mark Pending';
+            }
+        });
+
+         paymentStatusBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newStatus = this.order.payment_status === 'pending' ? 'done' : 'pending';
+            
+            try {
+                paymentStatusBtn.disabled = true;
+                paymentStatusBtn.textContent = 'Updating...';
+                
+                if (this.onPaymentStatusChange) {
+                    await this.onPaymentStatusChange(this.order.id, newStatus);
+                }
+                
+                // Update the order object with the new status
+                this.order.onPaymentStatusChange = newStatus;
+                    
+                // Update both the status cell and button
+                this.update(this.order);
+
+            } catch (error) {
+                console.error('Failed to update payment status:', error);
+                notifications.error('Failed to update order payment status');
+            } finally {
+                paymentStatusBtn.disabled = false;
+                paymentStatusBtn.textContent = newStatus === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending';
             }
         });
 
@@ -106,7 +139,7 @@ class OrderCard {
         // Update status button
         const statusBtn = document.querySelector(`[data-order-id="${order.id}"] .btn-status`);
         if (statusBtn) {
-            statusBtn.textContent = order.status === 'pending' ? 'Mark Complete' : 'Mark Pending';
+            statusBtn.textContent = order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending';
         }
     }
 
@@ -147,6 +180,7 @@ class OrderCard {
                 order,
                 handlers.onEdit,
                 handlers.onStatusChange,
+                handlers.onPaymentStatusChange,
                 handlers.onView
             );
             container.appendChild(card.render());

@@ -1,3 +1,5 @@
+// database.js 
+
 const initSqlJs = require('sql.js');
 const path = require('path');
 const fs = require('fs');
@@ -36,7 +38,6 @@ class OrderDatabase {
         this.migrateDatabaseSchema();
       }
 
-
       return true;
     } catch (error) {
       console.error('Database initialization failed:', error);
@@ -58,8 +59,10 @@ class OrderDatabase {
           image_path TEXT,
           order_notes TEXT,
           status TEXT DEFAULT 'pending',
+          payment_status TEXT DEFAULT 'pending',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          delivery_time DATETIME
         )
       `;
 
@@ -67,7 +70,8 @@ class OrderDatabase {
         'CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)',
         'CREATE INDEX IF NOT EXISTS idx_customer_name ON orders(customer_name)',
         'CREATE INDEX IF NOT EXISTS idx_phone_number ON orders(phone_number)',
-        'CREATE INDEX IF NOT EXISTS idx_status ON orders(status)'
+        'CREATE INDEX IF NOT EXISTS idx_status ON orders(status)',
+        'CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)'
       ];
 
       this.db.run(createOrdersTable);
@@ -81,105 +85,9 @@ class OrderDatabase {
     }
   }
 
-  migrateDatabaseSchema() {
-    try {
-      console.log('Checking for database schema migrations...');
-      
-      const tableInfo = this.db.exec("PRAGMA table_info(orders)");
-      if (tableInfo.length > 0) {
-        const columns = tableInfo[0].values.map(row => row[1]); // column names are at index 1
-        console.log('Current table columns:', columns);
-        
-        let needsMigration = false;
-        let migrationReason = '';
-        
-        // Check for day_of_week column (old schema)
-        if (columns.includes('day_of_week')) {
-          needsMigration = true;
-          migrationReason += 'Removing day_of_week column. ';
-        }
-        
-        // Check for missing weight/address columns (new schema)
-        if (!columns.includes('weight') || !columns.includes('address')) {
-          needsMigration = true;
-          migrationReason += 'Adding weight and address columns. ';
-        }
-        
-        if (needsMigration) {
-          console.log(`Migrating schema: ${migrationReason}`);
-          console.log('Starting table migration...');
-          
-          try {
-            // Begin transaction
-            this.db.run('BEGIN TRANSACTION');
-            
-            // Create new table with current schema
-            this.db.run(`
-              CREATE TABLE orders_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_name TEXT NOT NULL,
-                phone_number TEXT NOT NULL,
-                order_date DATE NOT NULL,
-                order_time TIME NOT NULL,
-                weight TEXT,
-                address TEXT,
-                image_path TEXT,
-                order_notes TEXT,
-                status TEXT DEFAULT 'pending',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-              )
-            `);
-            
-            // Copy existing data, using NULL for missing columns
-            const selectColumns = [
-              'id', 'customer_name', 'phone_number', 'order_date', 'order_time',
-              'image_path', 'order_notes', 'status', 'created_at', 'updated_at'
-            ];
-            
-            this.db.run(`
-              INSERT INTO orders_new (id, customer_name, phone_number, order_date, order_time, weight, address, image_path, order_notes, status, created_at, updated_at)
-              SELECT ${selectColumns.join(', ')}, NULL as weight, NULL as address
-              FROM orders
-            `);
-            
-            // Drop old table and rename new one
-            this.db.run('DROP TABLE orders');
-            this.db.run('ALTER TABLE orders_new RENAME TO orders');
-            
-            // Recreate indexes
-            this.db.run('CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)');
-            this.db.run('CREATE INDEX IF NOT EXISTS idx_customer_name ON orders(customer_name)');
-            this.db.run('CREATE INDEX IF NOT EXISTS idx_phone_number ON orders(phone_number)');
-            this.db.run('CREATE INDEX IF NOT EXISTS idx_status ON orders(status)');
-            
-            // Commit transaction
-            this.db.run('COMMIT');
-            
-            console.log('Schema migration completed successfully');
-            this.saveDatabase();
-          } catch (migrationError) {
-            // Rollback on error
-            try {
-              this.db.run('ROLLBACK');
-            } catch (rollbackError) {
-              console.error('Rollback failed:', rollbackError);
-            }
-            throw migrationError;
-          }
-        } else {
-          console.log('Schema is up to date, no migration needed');
-        }
-      } else {
-        // If table doesn't exist, create it
-        this.createTables();
-      }
-    } catch (error) {
-      console.error('Error during database migration:', error);
-      throw error;
-    }
-  }
-
+ migrateDatabaseSchema() {
+  // use this function to run migration conditionally
+ }
   saveDatabase() {
     try {
       const data = this.db.export();
@@ -199,17 +107,21 @@ class OrderDatabase {
         weight = '',
         address = '',
         imagePath,
-        orderNotes = ''
+        orderNotes = '',
+        paymentStatus = 'pending'
       } = orderData;
 
       const sql = `
         INSERT INTO orders (
           customer_name, phone_number, order_date, order_time,
-          weight, address, image_path, order_notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          weight, address, image_path, order_notes, payment_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
-      this.db.run(sql, [customerName, phoneNumber, orderDate, orderTime, weight, address, imagePath, orderNotes]);
+      this.db.run(sql, [
+        customerName, phoneNumber, orderDate, orderTime,
+        weight, address, imagePath, orderNotes, paymentStatus
+      ]);
       
       // Get the last inserted ID
       const result = this.db.exec("SELECT last_insert_rowid() as id");
@@ -232,6 +144,11 @@ class OrderDatabase {
       if (filter.status) {
         conditions.push('status = ?');
         params.push(filter.status);
+      }
+
+      if (filter.paymentStatus) {
+        conditions.push('payment_status = ?');
+        params.push(filter.paymentStatus);
       }
 
       if (filter.date) {
@@ -267,17 +184,15 @@ class OrderDatabase {
         params.push(filter.offset);
       }
 
-      // Use exec instead of prepare for better compatibility
       const result = this.db.exec(sql, params);
       
       if (result.length === 0) {
-        return []; // No results
+        return [];
       }
       
       const columns = result[0].columns;
       const values = result[0].values;
       
-      // Convert to array of objects
       const orders = values.map(row => {
         const obj = {};
         columns.forEach((col, index) => {
@@ -289,7 +204,7 @@ class OrderDatabase {
       return orders;
     } catch (error) {
       console.error('Error fetching orders:', error);
-      return []; // Return empty array on error
+      return [];
     }
   }
 
@@ -317,16 +232,48 @@ class OrderDatabase {
     try {
       const sql = `
         UPDATE orders 
-        SET status = ?, updated_at = datetime('now') 
+        SET status = ?, 
+            delivery_time = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE NULL END,
+            updated_at = datetime('now') 
         WHERE id = ?
       `;
-
-      this.db.run(sql, [status, id]);
+      this.db.run(sql, [status, status, id]);
       this.saveDatabase();
-      
-      return 1; // Assume one row changed
+      return 1;
     } catch (error) {
       console.error('Error updating order status:', error);
+      throw error;
+    }
+  }
+
+  async updateOrderPaymentStatus(id, status) {
+    try {
+      const sql = `
+        UPDATE orders 
+        SET payment_status = ?, updated_at = datetime('now') 
+        WHERE id = ?
+      `;
+      this.db.run(sql, [status, id]);
+      this.saveDatabase();
+      return 1;
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      throw error;
+    }
+  }
+
+  async updatePaymentStatus(id, paymentStatus) {
+    try {
+      const sql = `
+        UPDATE orders 
+        SET payment_status = ?, updated_at = datetime('now') 
+        WHERE id = ?
+      `;
+      this.db.run(sql, [paymentStatus, id]);
+      this.saveDatabase();
+      return 1;
+    } catch (error) {
+      console.error('Error updating payment status:', error);
       throw error;
     }
   }
@@ -362,6 +309,11 @@ class OrderDatabase {
         params.push(filter.status);
       }
 
+      if (filter.paymentStatus) {
+        conditions.push('payment_status = ?');
+        params.push(filter.paymentStatus);
+      }
+
       if (filter.search) {
         conditions.push('(customer_name LIKE ? OR phone_number LIKE ?)');
         params.push(`%${filter.search}%`);
@@ -392,16 +344,10 @@ class OrderDatabase {
   async clearAllData() {
     try {
       console.log('Clearing all data from database...');
-      
-      // Delete all orders
       this.db.run('DELETE FROM orders');
-      
-      // Reset the auto-increment counter
       this.db.run("DELETE FROM sqlite_sequence WHERE name='orders'");
-      
       console.log('All data cleared successfully');
       this.saveDatabase();
-      
       return { success: true, message: 'All data cleared successfully' };
     } catch (error) {
       console.error('Error clearing data:', error);

@@ -45,7 +45,16 @@
                         <select id="status-filter" class="filter-select">
                             <option value="">All Status</option>
                             <option value="pending">Pending</option>
-                            <option value="completed">Completed</option>
+                            <option value="delivered">Delivered</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="payment-status-filter">Payment Status:</label>
+                        <select id="payment-status-filter" class="filter-select">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="done">Done</option>
                         </select>
                     </div>
                 </div>
@@ -78,7 +87,7 @@
                     <button class="tab active" data-tab="all">All Orders</button>
                     <button class="tab" data-tab="today">Today's Orders</button>
                     <button class="tab" data-tab="week">This Week</button>
-                    <button class="tab" data-tab="completed">Completed</button>
+                    <button class="tab" data-tab="delivered">Delivered</button>
                     <button class="tab" data-tab="pending">Pending</button>
                 </div>
 
@@ -116,6 +125,7 @@
                                         <th>Date</th>
                                         <th>Time</th>
                                         <th>Status</th>
+                                        <th>Payment Status</th>
                                         <th>Image</th>
                                         <th>Actions</th>
                                     </tr>

@@ -122,20 +122,21 @@
     font-weight: 400;
 }
 
-.orders-table .order-status {
+.orders-table .order-status,  .orders-table .order-payment-status{
     font-weight: 600;
     font-size: 14px;
     text-transform: capitalize;
     background: transparent !important;
 }
 
-.orders-table .order-status.pending {
+.orders-table .order-status.pending, .order-payment-status.pending {
     color: #f59e0b;
 }
 
-.orders-table .order-status.completed {
+.orders-table .order-status.delivered, .order-payment-status.done {
     color: #10b981;
 }
+
 
 .orders-table .image-cell {
     font-size: 13px;
@@ -264,7 +265,24 @@
     color: #f59e0b;
 }
 
-.order-status.completed {
+.order-status.delivered {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.order-payment-status{
+    padding: 4px 8px;    
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.order-status.pending {
+    background: rgba(251, 191, 36, 0.1);
+    color: #f59e0b;
+}
+
+.order-status.done {
     background: rgba(16, 185, 129, 0.1);
     color: #10b981;
 }

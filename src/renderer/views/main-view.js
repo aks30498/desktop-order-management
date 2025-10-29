@@ -171,9 +171,7 @@ class MainView {
             } catch (error) {
                 console.error('Error refreshing orders view:', error);
             }
-        }
-        
-        // Order added - success is implicit, no notification needed
+        }        
     }
 
     handleOrderStatusChanged(data) {
@@ -224,7 +222,7 @@ class MainView {
                     break;
                 case '4':
                     e.preventDefault();
-                    this.switchOrderTab('completed');
+                    this.switchOrderTab('delivered');
                     break;
                 case '5':
                     e.preventDefault();

@@ -136,7 +136,7 @@ class OrderDetail {
             <!-- Actions -->
             <div class="detail-actions">
                 <button class="btn btn-primary" id="toggle-status-btn">
-                    ${order.status === 'pending' ? 'Mark as Complete' : 'Mark as Pending'}
+                    ${order.status === 'pending' ? 'Mark as Delivered' : 'Mark as Pending'}
                 </button>
                 <button class="btn btn-secondary" id="preview-pdf-btn">
                     <span class="icon">picture_as_pdf</span>
@@ -268,7 +268,7 @@ class OrderDetail {
     }
 
     async handleStatusToggle(order) {
-        const newStatus = order.status === 'pending' ? 'completed' : 'pending';
+        const newStatus = order.status === 'pending' ? 'delivered' : 'pending';
         
         try {
             const result = await Helpers.ipcInvoke('update-order-status', order.id, newStatus);
