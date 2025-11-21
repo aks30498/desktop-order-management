@@ -1,15 +1,16 @@
 class OrderCard {
-    constructor(order, onEdit, onStatusChange, onPaymentStatusChange, onView) {
+    constructor(order, onEdit, onStatusChange, onPaymentStatusChange, onView, onDelete) {
         this.order = order;
         this.onEdit = onEdit;
         this.onStatusChange = onStatusChange;
         this.onPaymentStatusChange = onPaymentStatusChange;
         this.onView = onView;
+        this.onDelete = onDelete;
     }
 
     render() {
         const row = document.createElement('tr');
-        row.className = 'order-row';
+        row.className = `order-row${this.order.deleted ? ' order-row-deleted' : ''}`;
         row.dataset.orderId = this.order.id;
 
         row.innerHTML = `
@@ -18,7 +19,9 @@ class OrderCard {
             <td class="order-phone">${Helpers.sanitizeHtml(this.order.phone_number)}</td>
             <td class="order-date">${Helpers.formatDate(this.order.order_date)}</td>
             <td class="order-time">${Helpers.formatTime(this.order.order_time)}</td>
-            <td class="order-status ${this.order.status}">${this.order.status}</td>
+            <td class="order-status ${this.order.status}">
+                ${this.getStatusMarkup()}
+            </td>
             <td class="order-payment-status ${this.order.payment_status}">${this.order.payment_status}</td>
             <td class="image-cell">
                 ${this.order.image_path ? 
@@ -27,14 +30,8 @@ class OrderCard {
                 }
             </td>
             <td class="table-actions">
-                <div class="table-actions">
-                    <button class="btn-link btn-view" data-action="view">View</button>
-                    <button class="btn-link btn-status" data-action="status">
-                        ${this.order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending'}
-                    </button>
-                    <button class="btn-link btn-payment-status" data-action="payment_status">
-                        ${this.order.payment_status === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending'}
-                    </button>
+                <div class="table-actions-container">
+                    ${this.getActionsMarkup()}
                 </div>
             </td>
         `;
@@ -43,11 +40,49 @@ class OrderCard {
         return row;
     }
 
+    getStatusMarkup() {
+        const label = `<div class="status-label">${this.order.status}</div>`;
+        const deliveredMeta = this.order.status === 'delivered' && this.order.delivered_at
+            ? `<div class="status-meta">${Helpers.formatDateTimeDisplay(this.order.delivered_at)}</div>`
+            : '';
+        const deletedMeta = this.order.deleted && this.order.deleted_at
+            ? `<div class="status-meta">Deleted ${Helpers.formatDateTimeDisplay(this.order.deleted_at)}</div>`
+            : '';
+        return `${label}${deliveredMeta}${deletedMeta}`;
+    }
+
+    getActionsMarkup() {
+        const actions = [
+            `<button class="btn-link btn-view" data-action="view">View</button>`
+        ];
+
+        if (!this.order.deleted) {
+            actions.push(`
+                <button class="btn-link btn-status" data-action="status">
+                    ${this.order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending'}
+                </button>
+            `);
+            actions.push(`
+                <button class="btn-link btn-payment-status" data-action="payment_status">
+                    ${this.order.payment_status === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending'}
+                </button>
+            `);
+            actions.push(`
+                <button class="btn-link btn-delete" data-action="delete">Delete</button>
+            `);
+        } else if (this.order.deleted_at) {
+            actions.push(`<span class="status-meta">Deleted ${Helpers.formatDateTimeDisplay(this.order.deleted_at)}</span>`);
+        }
+
+        return actions.join('');
+    }
+
     attachEventListeners(card) {
         const viewBtn = card.querySelector('.btn-view');
         const statusBtn = card.querySelector('.btn-status');
         const viewImageBtn = card.querySelector('.btn-view-image');
         const paymentStatusBtn = card.querySelector('.btn-payment-status');
+        const deleteBtn = card.querySelector('.btn-delete');
 
         // View details
         viewBtn.addEventListener('click', (e) => {
@@ -69,77 +104,81 @@ class OrderCard {
         }
 
         // Toggle status
-        statusBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const newStatus = this.order.status === 'pending' ? 'delivered' : 'pending';
-            
-            try {
-                statusBtn.disabled = true;
-                statusBtn.textContent = 'Updating...';
+        if (statusBtn) {
+            statusBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const newStatus = this.order.status === 'pending' ? 'delivered' : 'pending';
                 
-                if (this.onStatusChange) {
-                    await this.onStatusChange(this.order.id, newStatus);
-                }
-                
-                // Update the order object with the new status
-                this.order.status = newStatus;
+                try {
+                    statusBtn.disabled = true;
+                    statusBtn.textContent = 'Updating...';
                     
-                // Update both the status cell and button
-                this.update(this.order);
-
-            } catch (error) {
-                console.error('Failed to update status:', error);
-                notifications.error('Failed to update order status');
-            } finally {
-                statusBtn.disabled = false;
-                statusBtn.textContent = newStatus === 'pending' ? 'Mark Delivered' : 'Mark Pending';
-            }
-        });
-
-         paymentStatusBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const newStatus = this.order.payment_status === 'pending' ? 'done' : 'pending';
-            
-            try {
-                paymentStatusBtn.disabled = true;
-                paymentStatusBtn.textContent = 'Updating...';
-                
-                if (this.onPaymentStatusChange) {
-                    await this.onPaymentStatusChange(this.order.id, newStatus);
+                    if (this.onStatusChange) {
+                        const updatedOrder = await this.onStatusChange(this.order.id, newStatus);
+                        if (updatedOrder) {
+                            this.update(updatedOrder);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to update status:', error);
+                    notifications.error('Failed to update order status');
+                } finally {
+                    statusBtn.disabled = false;
                 }
-                
-                // Update the order object with the new status
-                this.order.onPaymentStatusChange = newStatus;
-                    
-                // Update both the status cell and button
-                this.update(this.order);
+            });
+        }
 
-            } catch (error) {
-                console.error('Failed to update payment status:', error);
-                notifications.error('Failed to update order payment status');
-            } finally {
-                paymentStatusBtn.disabled = false;
-                paymentStatusBtn.textContent = newStatus === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending';
-            }
-        });
+        if (paymentStatusBtn) {
+            paymentStatusBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const newStatus = this.order.payment_status === 'pending' ? 'done' : 'pending';
+                
+                try {
+                    paymentStatusBtn.disabled = true;
+                    paymentStatusBtn.textContent = 'Updating...';
+                    
+                    if (this.onPaymentStatusChange) {
+                        await this.onPaymentStatusChange(this.order.id, newStatus);
+                    }
+                    
+                    this.order.payment_status = newStatus;
+                    this.update(this.order);
+
+                } catch (error) {
+                    console.error('Failed to update payment status:', error);
+                    notifications.error('Failed to update order payment status');
+                } finally {
+                    paymentStatusBtn.disabled = false;
+                    paymentStatusBtn.textContent = newStatus === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending';
+                }
+            });
+        }
+
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (this.onDelete) {
+                    deleteBtn.disabled = true;
+                    deleteBtn.textContent = 'Deleting...';
+                    try {
+                        await this.onDelete(this.order.id);
+                    } finally {
+                        deleteBtn.disabled = false;
+                        deleteBtn.textContent = 'Delete';
+                    }
+                }
+            });
+        }
 
         // Remove row click handler - only explicit View button should trigger view
     }
 
     update(order) {
         this.order = order;
-        
-        // Update status
-        const statusElement = document.querySelector(`[data-order-id="${order.id}"] .order-status`);
-        if (statusElement) {
-            statusElement.className = `order-status ${order.status}`;
-            statusElement.textContent = order.status;
-        }
-
-        // Update status button
-        const statusBtn = document.querySelector(`[data-order-id="${order.id}"] .btn-status`);
-        if (statusBtn) {
-            statusBtn.textContent = order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending';
+        const existingRow = document.querySelector(`[data-order-id="${order.id}"]`);
+        if (existingRow && existingRow.parentNode) {
+            const newRow = this.render();
+            existingRow.parentNode.replaceChild(newRow, existingRow);
         }
     }
 

@@ -220,8 +220,8 @@ class OrderManagementApp {
 
     ipcMain.handle('update-order-status', async (event, id, status) => {
       try {
-        await database.updateOrderStatus(id, status);
-        return { success: true };
+        const order = await database.updateOrderStatus(id, status);
+        return { success: true, order };
       } catch (error) {
         console.error('Error updating order status:', error);
         return { success: false, error: error.message };
@@ -234,6 +234,16 @@ class OrderManagementApp {
         return { success: true };
       } catch (error) {
         console.error('Error updating order payment status:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('delete-order', async (event, id) => {
+      try {
+        const order = await database.deleteOrder(id);
+        return { success: true, order };
+      } catch (error) {
+        console.error('Error deleting order:', error);
         return { success: false, error: error.message };
       }
     });

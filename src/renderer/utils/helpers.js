@@ -25,6 +25,25 @@ class Helpers {
         return `${this.formatDate(dateString)} at ${this.formatTime(timeString)}`;
     }
 
+    static formatDateTimeDisplay(dateTimeString) {
+        if (!dateTimeString) return '';
+        // Normalize SQLite datetime format (YYYY-MM-DD HH:MM:SS)
+        const normalized = dateTimeString.replace(' ', 'T');
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) {
+            return dateTimeString;
+        }
+
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+    }
+
     static getDayOfWeek(dateString) {
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', { weekday: 'long' });

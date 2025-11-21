@@ -465,6 +465,7 @@ body {
     white-space: nowrap;
     word-wrap: normal;
     direction: ltr;
+    font-feature-settings: 'liga';
     -webkit-font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
 }
@@ -601,6 +602,120 @@ body {
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-bottom: 16px;
+}
+
+.barcode-scanner-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+}
+
+.barcode-scanner-modal.hidden {
+    display: none !important;
+}
+
+.barcode-scanner-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 11, 40, 0.65);
+    backdrop-filter: blur(4px);
+}
+
+.barcode-scanner-panel {
+    position: relative;
+    width: min(480px, 92vw);
+    background: var(--surface-color);
+    border-radius: 18px;
+    padding: 24px;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    box-shadow: var(--shadow-4);
+}
+
+.barcode-scanner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.barcode-scanner-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.barcode-scanner-header p {
+    margin: 4px 0 0;
+}
+
+.barcode-scanner-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.barcode-scanner-body label {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.barcode-scanner-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid var(--border-light);
+    border-radius: 12px;
+    font-size: 17px;
+    font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.barcode-scanner-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.scanner-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.scanner-result {
+    border-left: 4px solid var(--border-light);
+    background: var(--bg-secondary);
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.scanner-result.success {
+    border-left-color: var(--success-color);
+    background: rgba(16, 185, 129, 0.08);
+    color: var(--success-color);
+}
+
+.scanner-result.error {
+    border-left-color: var(--error-color);
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--error-color);
+}
+
+.barcode-scanner-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.barcode-scanner-panel .btn-icon {
+    font-size: 20px;
+    line-height: 1;
 }
 
 @keyframes spin {

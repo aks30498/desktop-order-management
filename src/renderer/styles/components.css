@@ -126,7 +126,20 @@
     font-weight: 600;
     font-size: 14px;
     text-transform: capitalize;
-    background: transparent !important;
+    background: transparent !important;   
+    gap: 2px;
+}
+
+.orders-table .order-status .status-label {
+    font-size: 14px;
+    text-transform: capitalize;
+}
+
+.orders-table .order-status .status-meta,
+.orders-table .table-actions .status-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 400;
 }
 
 .orders-table .order-status.pending, .order-payment-status.pending {
@@ -144,13 +157,6 @@
     font-weight: 400;
 }
 
-.orders-table .table-actions {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: flex-start;
-    min-height: 20px;
-}
 
 .orders-table .btn-view-image {
     background: none;
@@ -195,6 +201,28 @@
 
 .orders-table .btn-link.btn-status:hover {
     color: var(--text-primary);
+}
+
+.order-row-deleted {
+    opacity: 0.75;
+}
+
+.detail-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    margin-top: 6px;
+}
+
+.detail-chip.delivered {
+    background: rgba(16, 185, 129, 0.15);
+    color: #047857;
 }
 
 /* Order Card */
@@ -922,11 +950,7 @@
     .orders-table td {
         padding: 6px 8px;
         font-size: 11px;
-    }
-    
-    .orders-table .table-actions {
-        gap: 8px;
-    }
+    }        
     
     .orders-table .btn-link,
     .orders-table .btn-view-image {
@@ -1079,6 +1103,11 @@
 
 .detail-section .detail-value {
     margin-top: 0;
+}
+
+.orders-table .table-actions-container {
+    display: flex;
+    column-gap: 16px;
 }
 
 

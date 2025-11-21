@@ -64,7 +64,12 @@ class OrderDetail {
             <!-- Top summary -->
             <div class="detail-summary">
                 <div class="summary-left">
-                    <h2>Order #${order.id}</h2>                    
+                    <h2>Order #${order.id}</h2>
+                    ${order.status === 'delivered' && order.delivered_at ? `
+                        <div class="detail-chip delivered">
+                            Delivered ${Helpers.formatDateTimeDisplay(order.delivered_at)}
+                        </div>
+                    ` : ''}
                 </div>
                 <div class="summary-right">
                     <span>${Helpers.formatDate(order.order_date)} • 
@@ -274,9 +279,7 @@ class OrderDetail {
             const result = await Helpers.ipcInvoke('update-order-status', order.id, newStatus);
             
             if (result.success) {
-                // Update current order
-                this.currentOrder.status = newStatus;
-                this.currentOrder.updated_at = new Date().toISOString();
+                this.currentOrder = result.order;
 
                 // Re-render detail
                 await this.renderOrderDetail();

@@ -119,6 +119,9 @@ class OrdersView {
                 case 'pending':
                     result = await Helpers.ipcInvoke('get-orders', { status: 'pending' });
                     break;
+                case 'deleted':
+                    result = await Helpers.ipcInvoke('get-orders', { deleted: true });
+                    break;
                 default:
                     result = await Helpers.ipcInvoke('get-orders', {});
             }
@@ -188,7 +191,14 @@ class OrdersView {
         this.ordersContainer.innerHTML = '';
 
         pageOrders.forEach(order => {
-            const card = new OrderCard(order, null, this.handleStatusChange.bind(this), this.handlePaymentStatusChange.bind(this) , this.handleViewOrder.bind(this));
+            const card = new OrderCard(
+                order,
+                null,
+                this.handleStatusChange.bind(this),
+                this.handlePaymentStatusChange.bind(this),
+                this.handleViewOrder.bind(this),
+                this.handleDeleteOrder.bind(this)
+            );
             this.ordersContainer.appendChild(card.render());
         });
     }
@@ -198,19 +208,11 @@ class OrdersView {
             const result = await Helpers.ipcInvoke('update-order-status', orderId, newStatus);
             
             if (result.success) {
-                // Update local order status
-                const order = this.orders.find(o => o.id === orderId);
-                if (order) {
-                    order.status = newStatus;
-                    order.updated_at = new Date().toISOString();
+                const updatedOrder = result.order;
+                if (!updatedOrder) {
+                    throw new Error('Order not found after update');
                 }
-
-                // Update filtered orders
-                const filteredOrder = this.filteredOrders.find(o => o.id === orderId);
-                if (filteredOrder) {
-                    filteredOrder.status = newStatus;
-                    filteredOrder.updated_at = new Date().toISOString();
-                }
+                this.syncOrderCollections(updatedOrder);
 
                 // Re-render if we're on a status-specific tab
                 if (this.currentTab === 'delivered' || this.currentTab === 'pending') {
@@ -219,7 +221,8 @@ class OrdersView {
                 }
 
                 // Update stats
-                this.updateStats();                
+                this.updateStats();
+                return updatedOrder;
             } else {
                 throw new Error(result.error || 'Failed to update status');
             }
@@ -235,17 +238,11 @@ class OrdersView {
         const result = await Helpers.ipcInvoke('update-payment-status', orderId, newPaymentStatus);
 
         if (result.success) {
-            // Update local order payment status
-            const order = this.orders.find(o => o.id === orderId);
-            if (order) {
-                order.payment_status = newPaymentStatus;
-                order.payment_updated_at = new Date().toISOString();
-            }
-            const filteredOrder = this.filteredOrders.find(o => o.id === orderId);
-            if (filteredOrder) {
-                filteredOrder.payment_status = newPaymentStatus;
-                filteredOrder.updated_at = new Date().toISOString();
-            }
+            this.syncOrderCollections({
+                id: orderId,
+                payment_status: newPaymentStatus,
+                updated_at: new Date().toISOString()
+            });
             this.refresh()
         } else {
             throw new Error(result.error || 'Failed to update payment status');
@@ -262,6 +259,32 @@ class OrdersView {
         // Dispatch custom event for order view
         const event = new CustomEvent('viewOrder', { detail: order });
         document.dispatchEvent(event);
+    }
+
+    async handleDeleteOrder(orderId) {
+        try {
+            const confirmed = await Helpers.showConfirm(
+                'This will move the order to Deleted tab. Continue?',
+                'Delete Order'
+            );
+            if (!confirmed) {
+                return false;
+            }
+
+            const result = await Helpers.ipcInvoke('delete-order', orderId);
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to delete order');
+            }
+
+            notifications.success('Order moved to Deleted');
+            await this.loadOrders();
+            await this.updateStats();
+            return true;
+        } catch (error) {
+            console.error('Error deleting order:', error);
+            notifications.error('Failed to delete order');
+            return false;
+        }
     }
 
     switchTab(tabName) {
@@ -411,6 +434,21 @@ class OrdersView {
             // Fall back to refreshing the entire view
             this.refresh();
         }
+    }
+
+    syncOrderCollections(updatedOrder) {
+        if (!updatedOrder) return;
+
+        const mergeOrder = (list) => {
+            if (!Array.isArray(list)) return;
+            const index = list.findIndex(o => o.id === updatedOrder.id);
+            if (index > -1) {
+                list[index] = { ...list[index], ...updatedOrder };
+            }
+        };
+
+        mergeOrder(this.orders);
+        mergeOrder(this.filteredOrders);
     }
 }
 

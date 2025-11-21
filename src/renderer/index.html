@@ -17,6 +17,10 @@
                         <span class="icon">add</span>
                         New Order
                     </button>
+                    <button id="btn-scan-barcode" class="btn btn-secondary">
+                        <span class="icon">qr_code_scanner</span>
+                        Scan Barcode
+                    </button>
                 </div>
             </div>
         </header>
@@ -89,6 +93,7 @@
                     <button class="tab" data-tab="week">This Week</button>
                     <button class="tab" data-tab="delivered">Delivered</button>
                     <button class="tab" data-tab="pending">Pending</button>
+                    <button class="tab" data-tab="deleted">Deleted</button>
                 </div>
 
                 <div class="content-area">
@@ -249,6 +254,41 @@
 
     <!-- Notification System -->
     <div id="notifications" class="notifications"></div>
+
+        <!-- Barcode Scanner Modal -->
+        <div id="barcode-scanner-modal" class="barcode-scanner-modal hidden">
+            <div class="barcode-scanner-backdrop"></div>
+            <div class="barcode-scanner-panel elevation-3">
+                <div class="barcode-scanner-header">
+                    <div>
+                        <h2>Scan Order Barcode</h2>
+                        <p class="text-muted">Use the connected barcode scanner or enter the code manually</p>
+                    </div>
+                    <button id="btn-close-barcode-modal" class="btn btn-icon" aria-label="Close scanner">
+                        ×
+                    </button>
+                </div>
+                <div class="barcode-scanner-body">
+                    <label for="barcode-scanner-input">Barcode Value</label>
+                    <input 
+                        type="text" 
+                        id="barcode-scanner-input" 
+                        class="barcode-scanner-input" 
+                        placeholder="Scan or type the barcode here"
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                    <p class="scanner-hint">
+                        Barcodes from printed slips map to stored product images. Scanning will open the related order.
+                    </p>
+                    <div id="barcode-scan-result" class="scanner-result hidden"></div>
+                </div>
+                <div class="barcode-scanner-footer">
+                    <button id="btn-cancel-barcode-scan" class="btn btn-secondary">Cancel</button>
+                    <button id="btn-barcode-scan-action" class="btn btn-primary">Scan Now</button>
+                </div>
+            </div>
+        </div>
 
     <!-- Scripts -->
     <script src="utils/helpers.js"></script>

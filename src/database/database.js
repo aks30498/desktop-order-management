@@ -62,7 +62,9 @@ class OrderDatabase {
           payment_status TEXT DEFAULT 'pending',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          delivery_time DATETIME
+          delivered_at DATETIME,
+          deleted INTEGER DEFAULT 0,
+          deleted_at DATETIME
         )
       `;
 
@@ -85,9 +87,44 @@ class OrderDatabase {
     }
   }
 
- migrateDatabaseSchema() {
-  // use this function to run migration conditionally
- }
+  migrateDatabaseSchema() {
+    try {
+      const tableInfo = this.db.exec('PRAGMA table_info(orders)');
+      const columns = tableInfo.length > 0
+        ? tableInfo[0].values.map(column => column[1])
+        : [];
+
+      const addColumn = (name, definition) => {
+        console.log(`Adding column ${name} to orders table`);
+        this.db.run(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
+      };
+
+      if (!columns.includes('delivered_at')) {
+        addColumn('delivered_at', 'DATETIME');
+        this.db.run(`UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered'`);
+      } else {
+        this.db.run(`UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered' AND (delivered_at IS NULL OR delivered_at = '')`);
+      }
+
+      if (columns.includes('delivery_time')) {
+        this.db.run(`UPDATE orders SET delivered_at = COALESCE(delivered_at, delivery_time) WHERE delivery_time IS NOT NULL`);
+      }
+
+      if (!columns.includes('deleted')) {
+        addColumn('deleted', 'INTEGER DEFAULT 0');
+        this.db.run('UPDATE orders SET deleted = 0');
+      }
+
+      if (!columns.includes('deleted_at')) {
+        addColumn('deleted_at', 'DATETIME');
+      }
+
+      this.saveDatabase();
+    } catch (error) {
+      console.error('Error migrating database schema:', error);
+      throw error;
+    }
+  }
   saveDatabase() {
     try {
       const data = this.db.export();
@@ -140,6 +177,15 @@ class OrderDatabase {
       let sql = 'SELECT * FROM orders';
       const params = [];
       const conditions = [];
+
+      const includeDeleted = filter.includeDeleted === true;
+
+      if (Object.prototype.hasOwnProperty.call(filter, 'deleted')) {
+        conditions.push('deleted = ?');
+        params.push(filter.deleted ? 1 : 0);
+      } else if (!includeDeleted) {
+        conditions.push('deleted = 0');
+      }
 
       if (filter.status) {
         conditions.push('status = ?');
@@ -233,13 +279,13 @@ class OrderDatabase {
       const sql = `
         UPDATE orders 
         SET status = ?, 
-            delivery_time = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE NULL END,
+            delivered_at = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE NULL END,
             updated_at = datetime('now') 
-        WHERE id = ?
+        WHERE id = ? AND deleted = 0
       `;
       this.db.run(sql, [status, status, id]);
       this.saveDatabase();
-      return 1;
+      return await this.getOrderById(id);
     } catch (error) {
       console.error('Error updating order status:', error);
       throw error;
@@ -304,6 +350,15 @@ class OrderDatabase {
       const params = [];
       const conditions = [];
 
+      const includeDeleted = filter.includeDeleted === true;
+
+      if (Object.prototype.hasOwnProperty.call(filter, 'deleted')) {
+        conditions.push('deleted = ?');
+        params.push(filter.deleted ? 1 : 0);
+      } else if (!includeDeleted) {
+        conditions.push('deleted = 0');
+      }
+
       if (filter.status) {
         conditions.push('status = ?');
         params.push(filter.status);
@@ -351,6 +406,24 @@ class OrderDatabase {
       return { success: true, message: 'All data cleared successfully' };
     } catch (error) {
       console.error('Error clearing data:', error);
+      throw error;
+    }
+  }
+
+  async deleteOrder(id) {
+    try {
+      const sql = `
+        UPDATE orders
+        SET deleted = 1,
+            deleted_at = datetime('now'),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `;
+      this.db.run(sql, [id]);
+      this.saveDatabase();
+      return await this.getOrderById(id);
+    } catch (error) {
+      console.error('Error deleting order:', error);
       throw error;
     }
   }

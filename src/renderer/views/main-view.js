@@ -23,6 +23,13 @@ class MainView {
         this.newOrderBtn = document.getElementById('btn-new-order');
         this.sidebarNewOrderBtn = document.getElementById('btn-sidebar-new-order');
         this.closeFormBtn = document.getElementById('btn-close-form');
+        this.scanBarcodeBtn = document.getElementById('btn-scan-barcode');
+        this.barcodeModal = document.getElementById('barcode-scanner-modal');
+        this.barcodeInput = document.getElementById('barcode-scanner-input');
+        this.barcodeResult = document.getElementById('barcode-scan-result');
+        this.barcodeScanActionBtn = document.getElementById('btn-barcode-scan-action');
+        this.barcodeCancelBtn = document.getElementById('btn-cancel-barcode-scan');
+        this.closeBarcodeModalBtn = document.getElementById('btn-close-barcode-modal');
         
         // Debug: Check if elements exist
         console.log('MainView elements check:', {
@@ -31,7 +38,9 @@ class MainView {
             orderDetailView: !!this.orderDetailView,
             newOrderBtn: !!this.newOrderBtn,
             sidebarNewOrderBtn: !!this.sidebarNewOrderBtn,
-            closeFormBtn: !!this.closeFormBtn
+            closeFormBtn: !!this.closeFormBtn,
+            scanBarcodeBtn: !!this.scanBarcodeBtn,
+            barcodeModal: !!this.barcodeModal
         });
         
         if (!this.newOrderBtn) {
@@ -58,6 +67,47 @@ class MainView {
             console.log('Sidebar New Order button clicked');
             this.showOrderForm();
         });
+
+        if (this.scanBarcodeBtn) {
+            this.scanBarcodeBtn.addEventListener('click', () => {
+                this.openBarcodeScanner();
+            });
+        }
+
+        if (this.barcodeScanActionBtn) {
+            this.barcodeScanActionBtn.addEventListener('click', () => {
+                this.handleBarcodeScan();
+            });
+        }
+
+        if (this.barcodeCancelBtn) {
+            this.barcodeCancelBtn.addEventListener('click', () => {
+                this.closeBarcodeScanner();
+            });
+        }
+
+        if (this.closeBarcodeModalBtn) {
+            this.closeBarcodeModalBtn.addEventListener('click', () => {
+                this.closeBarcodeScanner();
+            });
+        }
+
+        if (this.barcodeModal) {
+            this.barcodeModal.addEventListener('click', (event) => {
+                if (event.target === this.barcodeModal || event.target.classList.contains('barcode-scanner-backdrop')) {
+                    this.closeBarcodeScanner();
+                }
+            });
+        }
+
+        if (this.barcodeInput) {
+            this.barcodeInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.handleBarcodeScan();
+                }
+            });
+        }
 
         // Close form button
         this.closeFormBtn.addEventListener('click', () => {
@@ -152,6 +202,134 @@ class MainView {
         this.orderDetailView.classList.add('hidden');
     }
 
+    openBarcodeScanner() {
+        if (!this.barcodeModal) {
+            console.warn('Barcode scanner modal not available');
+            return;
+        }
+
+        this.barcodeModal.classList.remove('hidden');
+        this.clearBarcodeScanResult();
+
+        if (this.barcodeInput) {
+            this.barcodeInput.value = '';
+            setTimeout(() => this.barcodeInput.focus(), 50);
+        }
+    }
+
+    closeBarcodeScanner() {
+        if (!this.barcodeModal) return;
+        this.barcodeModal.classList.add('hidden');
+        this.clearBarcodeScanResult();
+    }
+
+    isBarcodeScannerOpen() {
+        return this.barcodeModal && !this.barcodeModal.classList.contains('hidden');
+    }
+
+    clearBarcodeScanResult() {
+        if (!this.barcodeResult) return;
+        this.barcodeResult.classList.add('hidden');
+        this.barcodeResult.classList.remove('success', 'error');
+        this.barcodeResult.textContent = '';
+    }
+
+    showBarcodeScanResult(message, type = 'info') {
+        if (!this.barcodeResult) return;
+        this.barcodeResult.textContent = message;
+        this.barcodeResult.classList.remove('hidden', 'success', 'error');
+
+        if (type === 'success') {
+            this.barcodeResult.classList.add('success');
+        } else if (type === 'error') {
+            this.barcodeResult.classList.add('error');
+        }
+    }
+
+    parseBarcodeValue(barcodeString) {
+        if (!barcodeString) {
+            return null;
+        }
+
+        const normalized = barcodeString.trim();
+
+        // Match local image server URLs: http://localhost:PORT/order-image/ID
+        const imageUrlMatch = normalized.match(/^http:\/\/localhost:(\d+)\/order-image\/(\d+)$/i);
+        if (imageUrlMatch) {
+            return {
+                type: 'image_url',
+                port: parseInt(imageUrlMatch[1], 10),
+                orderId: parseInt(imageUrlMatch[2], 10),
+                barcodeValue: normalized
+            };
+        }
+
+        // Match file path references (legacy)
+        if (normalized.startsWith('file://')) {
+            const filePath = normalized.substring(7);
+            return {
+                type: 'image_path',
+                filePath,
+                barcodeValue: normalized
+            };
+        }
+
+        // Match classic order barcode ORD####
+        const orderMatch = normalized.match(/^ORD(\d{4})(\d{6})$/i);
+        if (orderMatch) {
+            return {
+                type: 'order',
+                orderId: parseInt(orderMatch[1], 10),
+                timestamp: orderMatch[2],
+                barcodeValue: normalized
+            };
+        }
+
+        return null;
+    }
+
+    async handleBarcodeScan() {
+        if (!this.barcodeInput) return;
+
+        const rawValue = this.barcodeInput.value.trim();
+        if (!rawValue) {
+            this.showBarcodeScanResult('Please scan or enter a barcode value.', 'error');
+            return;
+        }
+
+        const parsedData = this.parseBarcodeValue(rawValue);
+        if (!parsedData) {
+            this.showBarcodeScanResult('Invalid barcode. Please scan a valid slip barcode.', 'error');
+            return;
+        }
+
+        const orderId = parsedData && (parsedData.type === 'image_url' || parsedData.type === 'order')
+            ? parsedData.orderId
+            : null;
+
+        if (!orderId) {
+            this.showBarcodeScanResult('Barcode does not map to a known order.', 'error');
+            return;
+        }
+
+        this.showBarcodeScanResult(`Searching for order #${orderId}...`);
+
+        try {
+            const response = await Helpers.ipcInvoke('get-order-by-id', orderId);
+            if (!response.success || !response.order) {
+                throw new Error(response.error || `Order #${orderId} not found.`);
+            }
+
+            this.showBarcodeScanResult(`Opening order #${orderId}`, 'success');
+            notifications.success(`Order #${orderId} loaded from barcode`);
+            this.showOrderDetail(response.order);
+            this.closeBarcodeScanner();
+        } catch (error) {
+            console.error('Failed to open order from barcode:', error);
+            this.showBarcodeScanResult(error.message || 'Unable to load order details.', 'error');
+        }
+    }
+
     updateHeaderContext(context) {
         // This could be expanded to show breadcrumbs or current context
         const statusIndicator = document.getElementById('status-indicator');
@@ -182,10 +360,24 @@ class MainView {
     }
 
     handleKeyboardShortcuts(e) {
+        if (this.isBarcodeScannerOpen()) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                this.closeBarcodeScanner();
+                return;
+            }
+            if (e.key === 'Enter' && document.activeElement === this.barcodeInput) {
+                e.preventDefault();
+                this.handleBarcodeScan();
+                return;
+            }
+        }
+
         // Ctrl/Cmd + N - New Order
         if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
             e.preventDefault();
             this.showOrderForm();
+            return;
         }
 
         // Ctrl/Cmd + R - Refresh (if in orders view)
@@ -194,6 +386,7 @@ class MainView {
             if (this.ordersViewComponent) {
                 this.ordersViewComponent.refresh();
             }
+            return;
         }
 
         // Escape - Close current view/form
@@ -227,6 +420,10 @@ class MainView {
                 case '5':
                     e.preventDefault();
                     this.switchOrderTab('pending');
+                    break;
+                case '6':
+                    e.preventDefault();
+                    this.switchOrderTab('deleted');
                     break;
             }
         }
