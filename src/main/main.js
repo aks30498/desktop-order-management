@@ -162,7 +162,7 @@ class OrderManagementApp {
         message: `Update ${info.version} downloaded. App will restart in 5 seconds to apply.`, 
         status: 'downloaded' 
       });
-      
+      console.log('[autoUpdater] Update downloaded:', info);
       // Relaunch the app after 5 seconds to install the update
       setTimeout(() => {
         autoUpdater.quitAndInstall();

@@ -1,6 +1,6 @@
 {
   "name": "desktop-order-management",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A lightweight desktop application for managing customer orders",
   "main": "src/main/main.js",
   "scripts": {
