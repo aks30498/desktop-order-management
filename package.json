@@ -1,6 +1,6 @@
 {
   "name": "desktop-order-management",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A lightweight desktop application for managing customer orders",
   "main": "src/main/main.js",
   "scripts": {
@@ -57,7 +57,7 @@
       "owner": "aks30498",
       "repo": "desktop-order-management",
       "private": false,
-      "releaseType": "draft"
+      "releaseType": "release"
     }
   }
 }
