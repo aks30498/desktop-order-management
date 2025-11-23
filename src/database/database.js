@@ -290,7 +290,7 @@ class OrderDatabase {
       console.error('Error updating order status:', error);
       throw error;
     }
-  }
+}
 
   async updateOrderPaymentStatus(id, status) {
     try {

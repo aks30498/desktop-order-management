@@ -124,7 +124,7 @@ class PrintService {
                     
                     <div class="field">
                         <label>Time:</label>
-                        <span class="value">${this.formatTime(order.order_time)}</span>
+                        <span class="value">${order.order_time}</span>
                     </div>
                     
                     <div class="field">
@@ -283,7 +283,7 @@ class PrintService {
                     
                     <div class="field">
                         <label>Time:</label>
-                        <span class="value">${this.formatTime(order.order_time)}</span>
+                        <span class="value">${order.order_time}</span>
                     </div>
                     
                     <div class="field">
@@ -559,7 +559,7 @@ class PrintService {
             </div>88
             
             <div class="info-line">
-                ${this.formatDate(order.order_date)} ${this.formatTime(order.order_time)}
+                ${this.formatDate(order.order_date)} ${order.order_time}
             </div>
             
             <div class="info-line">
@@ -941,7 +941,7 @@ class PrintService {
                     currentY += 12;
                     
                     // Date and Time
-                    const dateTime = `${this.formatDate(order.order_date)} ${this.formatTime(order.order_time)}`;
+                    const dateTime = `${this.formatDate(order.order_date)} ${order.order_time}`;
                     doc.fontSize(6).font('Courier')
                        .text(dateTime, 10, currentY, { align: 'center', width: 124 });
                     currentY += 10;
@@ -1165,7 +1165,7 @@ class PrintService {
                 <div class="field"><strong>Customer:</strong> ${this.escapeHtml(order.customer_name)}</div>
                 <div class="field"><strong>Phone:</strong> ${this.escapeHtml(order.phone_number)}</div>
                 <div class="field"><strong>Date:</strong> ${this.formatDate(order.order_date)}</div>
-                <div class="field"><strong>Time:</strong> ${this.formatTime(order.order_time)}</div>
+                <div class="field"><strong>Time:</strong> ${order.order_time}</div>
                 <div class="field"><strong>Day:</strong> ${this.getDayOfWeek(order.order_date)}</div>
                 ${order.weight ? `<div class="field"><strong>Weight:</strong> ${this.escapeHtml(order.weight)}</div>` : ''}
                 ${order.address ? `<div class="field"><strong>Address:</strong> ${this.escapeHtml(order.address)}</div>` : ''}
@@ -1191,7 +1191,7 @@ Order #: ${order.id}
 Customer: ${order.customer_name}
 Phone: ${order.phone_number}
 Date: ${this.formatDate(order.order_date)}
-Time: ${this.formatTime(order.order_time)}
+Time: ${order.order_time}
 Day: ${this.getDayOfWeek(order.order_date)}
 ${order.weight ? `Weight: ${order.weight}` : ''}
 ${order.address ? `Address: ${order.address}` : ''}
@@ -1211,7 +1211,7 @@ Order #: ${order.id}
 Customer: ${order.customer_name}
 Phone: ${order.phone_number}
 Date: ${this.formatDate(order.order_date)}
-Time: ${this.formatTime(order.order_time)}
+Time: ${order.order_time}
 Day: ${this.getDayOfWeek(order.order_date)}
 ${order.weight ? `Weight: ${order.weight}` : ''}
 ${order.address ? `Address: ${order.address}` : ''}

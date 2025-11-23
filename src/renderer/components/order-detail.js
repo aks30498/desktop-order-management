@@ -73,7 +73,7 @@ class OrderDetail {
                 </div>
                 <div class="summary-right">
                     <span>${Helpers.formatDate(order.order_date)} • 
-                        ${Helpers.formatTime(order.order_time)} • 
+                        ${order.order_time} • 
                         ${Helpers.getDayOfWeek(order.order_date)}
                     </span>
                 </div>

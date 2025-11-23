@@ -2,7 +2,15 @@
 
 class Helpers {
     static formatDate(dateString) {
-        const date = new Date(dateString);
+        if (!dateString) return '';
+        const parts = dateString.split('-').map(Number);
+        
+        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+
+        if (Number.isNaN(date.getTime())) {
+            return dateString;
+        }
+        
         return date.toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
@@ -27,13 +35,13 @@ class Helpers {
 
     static formatDateTimeDisplay(dateTimeString) {
         if (!dateTimeString) return '';
-        // Normalize SQLite datetime format (YYYY-MM-DD HH:MM:SS)
-        const normalized = dateTimeString.replace(' ', 'T');
-        const date = new Date(normalized);
+        const normalized = dateTimeString.replace(' ', 'T'); 
+        const utcString = normalized + 'Z';
+        const date = new Date(utcString);  
         if (Number.isNaN(date.getTime())) {
-            return dateTimeString;
+            // Fallback if parsing fails
+            return dateTimeString; 
         }
-
         return date.toLocaleString('en-US', {
             year: 'numeric',
             month: 'short',

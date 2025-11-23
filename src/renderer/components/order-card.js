@@ -18,7 +18,7 @@ class OrderCard {
             <td class="order-customer">${Helpers.sanitizeHtml(this.order.customer_name)}</td>
             <td class="order-phone">${Helpers.sanitizeHtml(this.order.phone_number)}</td>
             <td class="order-date">${Helpers.formatDate(this.order.order_date)}</td>
-            <td class="order-time">${Helpers.formatTime(this.order.order_time)}</td>
+            <td class="order-time">${this.order.order_time}</td>
             <td class="order-status ${this.order.status}">
                 ${this.getStatusMarkup()}
             </td>
