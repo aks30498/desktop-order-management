@@ -97,6 +97,7 @@ class OrderManagementApp {
   sendStatusToWindow(channel, message) {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, message);
+      console.log('[autoUpdater] Sending status to window:', channel, message);
     }
   }
   
@@ -104,7 +105,7 @@ class OrderManagementApp {
    * Manually checks for updates and reports status.
    */
   checkUpdateManually() {
-    autoUpdater.checkForUpdates();
+    autoUpdater.checkForUpdatesAndNotify();
   }
 
   /**
@@ -117,20 +118,22 @@ class OrderManagementApp {
     // Check at regular intervals (every 6 hours)
     const SIX_HOURS = 6 * 60 * 60 * 1000;
     setInterval(() => {
-      console.log('Checking for updates via interval...');
+      console.log('[autoUpdater] Checking for updates via interval...');
       this.checkUpdateManually();
     }, SIX_HOURS);
   }
-
   /**
    * Sets up event listeners for electron-updater.
    */
+
   setupAutoUpdater() {
     autoUpdater.on('checking-for-update', () => {
+      console.log('[autoUpdater] Checking for updates...');
       this.sendStatusToWindow('update:status', { message: 'Checking for update...', status: 'checking' });
     });
 
     autoUpdater.on('update-available', (info) => {
+      console.log('[autoUpdater] Update available:', info);
       this.sendStatusToWindow('update:status', { 
         message: `Update available! Version ${info.version} is downloading...`, 
         status: 'downloading',
