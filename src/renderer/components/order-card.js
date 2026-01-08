@@ -52,125 +52,170 @@ class OrderCard {
     }
 
     getActionsMarkup() {
-        const actions = [
-            `<button class="btn-link btn-view" data-action="view">View</button>`
-        ];
-
-        if (!this.order.deleted) {
-            actions.push(`
-                <button class="btn-link btn-status" data-action="status">
-                    ${this.order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending'}
-                </button>
-            `);
-            actions.push(`
-                <button class="btn-link btn-payment-status" data-action="payment_status">
-                    ${this.order.payment_status === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending'}
-                </button>
-            `);
-            actions.push(`
-                <button class="btn-link btn-delete" data-action="delete">Delete</button>
-            `);
-        } else if (this.order.deleted_at) {
-            actions.push(`<span class="status-meta">Deleted ${Helpers.formatDateTimeDisplay(this.order.deleted_at)}</span>`);
+        if (this.order.deleted && this.order.deleted_at) {
+            return `<span class="status-meta">Deleted ${Helpers.formatDateTimeDisplay(this.order.deleted_at)}</span>`;
         }
 
-        return actions.join('');
+        return `
+            <div class="actions-dropdown">
+                <button class="actions-menu-btn" data-action="toggle-menu" aria-label="Actions menu">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="8" cy="2" r="1.5"/>
+                        <circle cx="8" cy="8" r="1.5"/>
+                        <circle cx="8" cy="14" r="1.5"/>
+                    </svg>
+                </button>
+                <div class="actions-menu" data-menu>
+                    <button class="menu-item" data-action="view">
+                        <span class="menu-item-icon">👁️</span>
+                        <span class="menu-item-text">View Details</span>
+                    </button>
+                    ${!this.order.deleted ? `
+                        <button class="menu-item" data-action="status">
+                            <span class="menu-item-icon">${this.order.status === 'pending' ? '✅' : '⏱️'}</span>
+                            <span class="menu-item-text">${this.order.status === 'pending' ? 'Mark Delivered' : 'Mark Pending'}</span>
+                        </button>
+                        <button class="menu-item" data-action="payment_status">
+                            <span class="menu-item-icon">${this.order.payment_status === 'pending' ? '💰' : '⏳'}</span>
+                            <span class="menu-item-text">${this.order.payment_status === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending'}</span>
+                        </button>
+                        <div class="menu-divider"></div>
+                        <button class="menu-item menu-item-danger" data-action="delete">
+                            <span class="menu-item-icon">🗑️</span>
+                            <span class="menu-item-text">Delete</span>
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
     }
 
     attachEventListeners(card) {
-        const viewBtn = card.querySelector('.btn-view');
-        const statusBtn = card.querySelector('.btn-status');
         const viewImageBtn = card.querySelector('.btn-view-image');
-        const paymentStatusBtn = card.querySelector('.btn-payment-status');
-        const deleteBtn = card.querySelector('.btn-delete');
-
-        // View details
-        viewBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (this.onView) {
-                this.onView(this.order);
-            }
-        });
+        const menuBtn = card.querySelector('.actions-menu-btn');
+        const menu = card.querySelector('.actions-menu');
 
         // View image
         if (viewImageBtn) {
             viewImageBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (this.order.image_path) {
-                    // Open image in a new window or modal
                     window.open(this.order.image_path, '_blank');
                 }
             });
         }
 
-        // Toggle status
-        if (statusBtn) {
-            statusBtn.addEventListener('click', async (e) => {
+        // Toggle menu
+        if (menuBtn && menu) {
+            menuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const newStatus = this.order.status === 'pending' ? 'delivered' : 'pending';
+                const isOpen = menu.classList.contains('show');
                 
-                try {
-                    statusBtn.disabled = true;
-                    statusBtn.textContent = 'Updating...';
-                    
-                    if (this.onStatusChange) {
-                        const updatedOrder = await this.onStatusChange(this.order.id, newStatus);
-                        if (updatedOrder) {
-                            this.update(updatedOrder);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to update status:', error);
-                    notifications.error('Failed to update order status');
-                } finally {
-                    statusBtn.disabled = false;
-                }
-            });
-        }
-
-        if (paymentStatusBtn) {
-            paymentStatusBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const newStatus = this.order.payment_status === 'pending' ? 'done' : 'pending';
+                // Close all other menus
+                document.querySelectorAll('.actions-menu.show').forEach(m => {
+                    if (m !== menu) m.classList.remove('show');
+                });
                 
-                try {
-                    paymentStatusBtn.disabled = true;
-                    paymentStatusBtn.textContent = 'Updating...';
-                    
-                    if (this.onPaymentStatusChange) {
-                        await this.onPaymentStatusChange(this.order.id, newStatus);
-                    }
-                    
-                    this.order.payment_status = newStatus;
-                    this.update(this.order);
+                menu.classList.toggle('show');
+            });
 
-                } catch (error) {
-                    console.error('Failed to update payment status:', error);
-                    notifications.error('Failed to update order payment status');
-                } finally {
-                    paymentStatusBtn.disabled = false;
-                    paymentStatusBtn.textContent = newStatus === 'pending' ? 'Mark Payment Done' : 'Mark Payment Pending';
-                }
+            // Handle menu item clicks
+            menu.querySelectorAll('.menu-item').forEach(item => {
+                item.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const action = item.dataset.action;
+                    menu.classList.remove('show');
+
+                    switch (action) {
+                        case 'view':
+                            if (this.onView) {
+                                this.onView(this.order);
+                            }
+                            break;
+
+                        case 'status':
+                            await this.handleStatusChange(item);
+                            break;
+
+                        case 'payment_status':
+                            await this.handlePaymentStatusChange(item);
+                            break;
+
+                        case 'delete':
+                            await this.handleDelete(item);
+                            break;
+                    }
+                });
             });
         }
 
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (this.onDelete) {
-                    deleteBtn.disabled = true;
-                    deleteBtn.textContent = 'Deleting...';
-                    try {
-                        await this.onDelete(this.order.id);
-                    } finally {
-                        deleteBtn.disabled = false;
-                        deleteBtn.textContent = 'Delete';
-                    }
-                }
-            });
-        }
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (menu && !menu.contains(e.target) && !menuBtn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+    }
 
-        // Remove row click handler - only explicit View button should trigger view
+    async handleStatusChange(button) {
+        const newStatus = this.order.status === 'pending' ? 'delivered' : 'pending';
+        
+        try {
+            button.disabled = true;
+            const icon = button.querySelector('.menu-item-icon');
+            const text = button.querySelector('.menu-item-text');
+            const originalText = text.textContent;
+            text.textContent = 'Updating...';
+            
+            if (this.onStatusChange) {
+                const updatedOrder = await this.onStatusChange(this.order.id, newStatus);
+                if (updatedOrder) {
+                    this.update(updatedOrder);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to update status:', error);
+            notifications.error('Failed to update order status');
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async handlePaymentStatusChange(button) {
+        const newStatus = this.order.payment_status === 'pending' ? 'done' : 'pending';
+        
+        try {
+            button.disabled = true;
+            const text = button.querySelector('.menu-item-text');
+            const originalText = text.textContent;
+            text.textContent = 'Updating...';
+            
+            if (this.onPaymentStatusChange) {
+                await this.onPaymentStatusChange(this.order.id, newStatus);
+            }
+            
+            this.order.payment_status = newStatus;
+            this.update(this.order);
+
+        } catch (error) {
+            console.error('Failed to update payment status:', error);
+            notifications.error('Failed to update order payment status');
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async handleDelete(button) {
+        if (this.onDelete) {
+            button.disabled = true;
+            const text = button.querySelector('.menu-item-text');
+            text.textContent = 'Deleting...';
+            try {
+                await this.onDelete(this.order.id);
+            } finally {
+                button.disabled = false;
+            }
+        }
     }
 
     update(order) {

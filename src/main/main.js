@@ -503,6 +503,24 @@ class OrderManagementApp {
         return { success: false, error: error.message };
       }
     });
+
+    
+    // Search users
+      ipcMain.handle('search-users', async (event, searchTerm) => {
+      try {
+      if (!searchTerm || !searchTerm.trim()) {
+            return { success: true, users: [] };
+      }
+
+      const users = await database.searchUsers(searchTerm.trim());
+      return { success: true, users };
+      } catch (error) {
+      console.error('Error searching users:', error);
+      return { success: false, error: error.message };
+      }
+      });
+
+
   }
 
   setupImageStorage() {

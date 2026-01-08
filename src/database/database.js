@@ -47,9 +47,23 @@ class OrderDatabase {
 
   createTables() {
     try {
+      // Create users table
+      const createUsersTable = `
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          phone_number TEXT NOT NULL UNIQUE,
+          address TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+
+      // Create orders table with user_id foreign key
       const createOrdersTable = `
         CREATE TABLE IF NOT EXISTS orders (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
           customer_name TEXT NOT NULL,
           phone_number TEXT NOT NULL,
           order_date DATE NOT NULL,
@@ -64,11 +78,15 @@ class OrderDatabase {
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           delivered_at DATETIME,
           deleted INTEGER DEFAULT 0,
-          deleted_at DATETIME
+          deleted_at DATETIME,
+          FOREIGN KEY (user_id) REFERENCES users(id)
         )
       `;
 
       const createIndexes = [
+        'CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number)',
+        'CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)',
+        'CREATE INDEX IF NOT EXISTS idx_order_user_id ON orders(user_id)',
         'CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)',
         'CREATE INDEX IF NOT EXISTS idx_customer_name ON orders(customer_name)',
         'CREATE INDEX IF NOT EXISTS idx_phone_number ON orders(phone_number)',
@@ -76,6 +94,7 @@ class OrderDatabase {
         'CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)'
       ];
 
+      this.db.run(createUsersTable);
       this.db.run(createOrdersTable);
       createIndexes.forEach(indexSql => this.db.run(indexSql));
       
@@ -89,6 +108,28 @@ class OrderDatabase {
 
   migrateDatabaseSchema() {
     try {
+      // Check if users table exists
+      const tablesResult = this.db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
+      const usersTableExists = tablesResult.length > 0 && tablesResult[0].values.length > 0;
+
+      if (!usersTableExists) {
+        console.log('Creating users table...');
+        const createUsersTable = `
+          CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone_number TEXT NOT NULL UNIQUE,
+            address TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `;
+        this.db.run(createUsersTable);
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number)');
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)');
+      }
+
+      // Check and migrate orders table
       const tableInfo = this.db.exec('PRAGMA table_info(orders)');
       const columns = tableInfo.length > 0
         ? tableInfo[0].values.map(column => column[1])
@@ -98,6 +139,11 @@ class OrderDatabase {
         console.log(`Adding column ${name} to orders table`);
         this.db.run(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
       };
+
+      if (!columns.includes('user_id')) {
+        addColumn('user_id', 'INTEGER');
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_order_user_id ON orders(user_id)');
+      }
 
       if (!columns.includes('delivered_at')) {
         addColumn('delivered_at', 'DATETIME');
@@ -125,6 +171,7 @@ class OrderDatabase {
       throw error;
     }
   }
+
   saveDatabase() {
     try {
       const data = this.db.export();
@@ -134,9 +181,161 @@ class OrderDatabase {
     }
   }
 
+  // ============ USER MANAGEMENT METHODS ============
+
+  async addUser(userData) {
+    try {
+      const { name, phoneNumber, address = '' } = userData;
+
+      const sql = `
+        INSERT INTO users (name, phone_number, address)
+        VALUES (?, ?, ?)
+      `;
+
+      this.db.run(sql, [name, phoneNumber, address]);
+      
+      const result = this.db.exec("SELECT last_insert_rowid() as id");
+      const lastId = result[0].values[0][0];
+      
+      this.saveDatabase();
+      return lastId;
+    } catch (error) {
+      console.error('Error adding user:', error);
+      throw error;
+    }
+  }
+
+  async getUserByPhone(phoneNumber) {
+    try {
+      const sql = 'SELECT * FROM users WHERE phone_number = ?';
+      const result = this.db.exec(sql, [phoneNumber]);
+      
+      if (result.length === 0 || result[0].values.length === 0) {
+        return null;
+      }
+      
+      const columns = result[0].columns;
+      const row = result[0].values[0];
+      
+      const user = {};
+      columns.forEach((col, index) => {
+        user[col] = row[index];
+      });
+      
+      return user;
+    } catch (error) {
+      console.error('Error fetching user by phone:', error);
+      return null;
+    }
+  }
+
+  async getUserById(id) {
+    try {
+      const sql = 'SELECT * FROM users WHERE id = ?';
+      const result = this.db.exec(sql, [id]);
+      
+      if (result.length === 0 || result[0].values.length === 0) {
+        return null;
+      }
+      
+      const columns = result[0].columns;
+      const row = result[0].values[0];
+      
+      const user = {};
+      columns.forEach((col, index) => {
+        user[col] = row[index];
+      });
+      
+      return user;
+    } catch (error) {
+      console.error('Error fetching user by id:', error);
+      return null;
+    }
+  }
+
+  async searchUsers(searchTerm) {
+    try {
+      const sql = `
+        SELECT * FROM users 
+        WHERE name LIKE ? OR phone_number LIKE ?
+        ORDER BY name ASC
+      `;
+      
+      const searchPattern = `%${searchTerm}%`;
+      const result = this.db.exec(sql, [searchPattern, searchPattern]);
+      
+      if (result.length === 0) {
+        return [];
+      }
+      
+      const columns = result[0].columns;
+      const values = result[0].values;
+      
+      const users = values.map(row => {
+        const obj = {};
+        columns.forEach((col, index) => {
+          obj[col] = row[index];
+        });
+        return obj;
+      });
+      
+      return users;
+    } catch (error) {
+      console.error('Error searching users:', error);
+      return [];
+    }
+  }
+
+  async updateUser(id, userData) {
+    try {
+      const { name, phoneNumber, address } = userData;
+      
+      const sql = `
+        UPDATE users 
+        SET name = ?, phone_number = ?, address = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `;
+      
+      this.db.run(sql, [name, phoneNumber, address, id]);
+      this.saveDatabase();
+      
+      return await this.getUserById(id);
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  }
+
+  async findOrCreateUser(userData) {
+    try {
+      const { name, phoneNumber, address = '' } = userData;
+      
+      // Try to find existing user by phone number
+      let user = await this.getUserByPhone(phoneNumber);
+      
+      if (user) {
+        // Update user info if it has changed
+        if (user.name !== name || user.address !== address) {
+          user = await this.updateUser(user.id, { name, phoneNumber, address });
+        }
+        return user;
+      }
+      
+      // Create new user if not found
+      const userId = await this.addUser({ name, phoneNumber, address });
+      return await this.getUserById(userId);
+    } catch (error) {
+      console.error('Error finding or creating user:', error);
+      throw error;
+    }
+  }
+
+  // ============ ORDER MANAGEMENT METHODS ============
+
   async addOrder(orderData) {
     try {
       const {
+        userId,
         customerName,
         phoneNumber,
         orderDate,
@@ -148,19 +347,30 @@ class OrderDatabase {
         paymentStatus = 'pending'
       } = orderData;
 
+      let finalUserId = userId;
+
+      // If no userId provided but we have customer details, find or create user
+      if (!userId && customerName && phoneNumber) {
+        const user = await this.findOrCreateUser({
+          name: customerName,
+          phoneNumber: phoneNumber,
+          address: address
+        });
+        finalUserId = user.id;
+      }
+
       const sql = `
         INSERT INTO orders (
-          customer_name, phone_number, order_date, order_time,
+          user_id, customer_name, phone_number, order_date, order_time,
           weight, address, image_path, order_notes, payment_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       this.db.run(sql, [
-        customerName, phoneNumber, orderDate, orderTime,
+        finalUserId, customerName, phoneNumber, orderDate, orderTime,
         weight, address, imagePath, orderNotes, paymentStatus
       ]);
       
-      // Get the last inserted ID
       const result = this.db.exec("SELECT last_insert_rowid() as id");
       const lastId = result[0].values[0][0];
       
@@ -185,6 +395,11 @@ class OrderDatabase {
         params.push(filter.deleted ? 1 : 0);
       } else if (!includeDeleted) {
         conditions.push('deleted = 0');
+      }
+
+      if (filter.userId) {
+        conditions.push('user_id = ?');
+        params.push(filter.userId);
       }
 
       if (filter.status) {
@@ -274,6 +489,10 @@ class OrderDatabase {
     }
   }
 
+  async getOrdersByUserId(userId) {
+    return this.getOrders({ userId });
+  }
+
   async updateOrderStatus(id, status) {
     try {
       const sql = `
@@ -290,7 +509,7 @@ class OrderDatabase {
       console.error('Error updating order status:', error);
       throw error;
     }
-}
+  }
 
   async updateOrderPaymentStatus(id, status) {
     try {
@@ -400,7 +619,9 @@ class OrderDatabase {
     try {
       console.log('Clearing all data from database...');
       this.db.run('DELETE FROM orders');
+      this.db.run('DELETE FROM users');
       this.db.run("DELETE FROM sqlite_sequence WHERE name='orders'");
+      this.db.run("DELETE FROM sqlite_sequence WHERE name='users'");
       console.log('All data cleared successfully');
       this.saveDatabase();
       return { success: true, message: 'All data cleared successfully' };

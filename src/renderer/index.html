@@ -163,6 +163,17 @@
                         <form id="order-form" class="order-form">
                             <div class="form-grid">
                                 <div class="form-group">
+                                    <label for="customer-search-input">Search Customer</label>
+                                    <input
+                                        type="text"
+                                        id="customer-search-input"
+                                        class="form-input"
+                                        placeholder="Search by name or phone"
+                                    />
+                                    <div class="customer-results hidden" id="customer-results"></div>
+                                </div>
+                                
+                                <div class="form-group">
                                     <label for="customer-name">Customer Name *</label>
                                     <input type="text" id="customer-name" name="customerName" required class="form-input">
                                     <span class="error-message" id="error-customer-name"></span>
