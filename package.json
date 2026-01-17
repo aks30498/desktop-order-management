@@ -5,13 +5,15 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
-    "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:all": "electron-builder --win --mac --linux",
     "pack": "electron-builder --dir",
     "dist": "npm run build",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "dev:ui": "vite",
+    "build:ui": "vite build",
+    "dev": "npm run dev:ui & electron .",
+    "build": "npm run build:ui && electron-builder"
   },
   "keywords": [
     "electron",
@@ -22,8 +24,14 @@
   "author": "Desktop Order Management Team",
   "license": "MIT",
   "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.2",
     "electron": "^27.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "vite": "^7.3.1"
   },
   "dependencies": {
     "bwip-js": "^4.7.0",
@@ -32,6 +40,8 @@
     "jsbarcode": "^3.12.1",
     "pdfkit": "^0.17.1",
     "puppeteer-core": "^24.17.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "sql.js": "^1.8.0"
   },
   "build": {
