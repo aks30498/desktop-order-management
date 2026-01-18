@@ -7,7 +7,7 @@ import { useState, useCallback } from "react";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import OrdersView from "./components/OrdersView";
-import OrderFormView from "./components/OrderFormView";
+import OrderFormView from "./components/OrderFormView.jsx";
 import OrderDetailModal from "./components/OrderDetailModal";
 import BarcodeModal from "./components/BarcodeModal";
 

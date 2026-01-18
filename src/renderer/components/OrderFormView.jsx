@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Helpers from "@/utils/helpers";
 
 const initialForm = {
   customerName: "",
@@ -107,7 +108,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   const handleDrop = async (e) => {
     e.preventDefault();
     const file = [...e.dataTransfer.files].find((f) =>
-      f.type.startsWith("image/")
+      f.type.startsWith("image/"),
     );
     if (file) await handleFile(file);
   };
@@ -157,7 +158,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
         const result = await Helpers.ipcInvoke(
           "save-image",
           selectedImagePath,
-          null
+          null,
         );
         if (!result.success) throw new Error(result.error);
         imagePath = result.imagePath;
@@ -188,9 +189,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   // --------------------
   const handleCancel = () => {
     const hasData =
-      Object.values(form).some(Boolean) ||
-      selectedImage ||
-      selectedImagePath;
+      Object.values(form).some(Boolean) || selectedImage || selectedImagePath;
 
     if (hasData) {
       const confirmed = confirm("Discard entered data?");
@@ -215,16 +214,11 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
       <div className="order-form">
         <div className="form-grid">
           {/* Customer */}
-          <Field
-            label="Customer Name *"
-            error={errors.customerName}
-          >
+          <Field label="Customer Name *" error={errors.customerName}>
             <input
               className="form-input"
               value={form.customerName}
-              onChange={(e) =>
-                update("customerName", e.target.value)
-              }
+              onChange={(e) => update("customerName", e.target.value)}
             />
           </Field>
 
@@ -233,9 +227,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
             <input
               className="form-input"
               value={form.phoneNumber}
-              onChange={(e) =>
-                handlePhoneChange(e.target.value)
-              }
+              onChange={(e) => handlePhoneChange(e.target.value)}
             />
           </Field>
 
@@ -245,9 +237,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
               type="date"
               className="form-input"
               value={form.orderDate}
-              onChange={(e) =>
-                update("orderDate", e.target.value)
-              }
+              onChange={(e) => update("orderDate", e.target.value)}
             />
           </Field>
 
@@ -256,9 +246,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
             <input
               className="form-input"
               value={form.orderTime}
-              onChange={(e) =>
-                update("orderTime", e.target.value)
-              }
+              onChange={(e) => update("orderTime", e.target.value)}
             />
           </Field>
 
@@ -276,9 +264,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
             <input
               className="form-input"
               value={form.address}
-              onChange={(e) =>
-                update("address", e.target.value)
-              }
+              onChange={(e) => update("address", e.target.value)}
             />
           </Field>
 
@@ -289,9 +275,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
               className="form-textarea"
               rows={3}
               value={form.orderNotes}
-              onChange={(e) =>
-                update("orderNotes", e.target.value)
-              }
+              onChange={(e) => update("orderNotes", e.target.value)}
             />
           </div>
 
@@ -317,10 +301,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
             {previewUrl && (
               <div className="image-preview">
                 <img src={previewUrl} />
-                <button
-                  className="btn-remove-image"
-                  onClick={removeImage}
-                >
+                <button className="btn-remove-image" onClick={removeImage}>
                   ×
                 </button>
               </div>
@@ -329,10 +310,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
         </div>
 
         <div className="form-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={handleCancel}
-          >
+          <button className="btn btn-secondary" onClick={handleCancel}>
             Cancel
           </button>
 

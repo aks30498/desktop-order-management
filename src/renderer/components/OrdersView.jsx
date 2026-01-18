@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import OrderDetailModal from "./OrderDetailModal";
 import OrderRow from "./OrderRow";
+import Helpers from "@/utils/helpers";
 
 const PAGE_SIZE = 50;
 
@@ -36,7 +37,9 @@ export default function OrdersView({ onOpenOrder }) {
           result = await Helpers.ipcInvoke("get-weeks-orders");
           break;
         case "delivered":
-          result = await Helpers.ipcInvoke("get-orders", { status: "delivered" });
+          result = await Helpers.ipcInvoke("get-orders", {
+            status: "delivered",
+          });
           break;
         case "pending":
           result = await Helpers.ipcInvoke("get-orders", { status: "pending" });
@@ -72,7 +75,7 @@ export default function OrdersView({ onOpenOrder }) {
       list = list.filter(
         (o) =>
           o.customer_name.toLowerCase().includes(term) ||
-          o.phone_number.includes(term)
+          o.phone_number.includes(term),
       );
     }
 
@@ -102,7 +105,7 @@ export default function OrdersView({ onOpenOrder }) {
   const handleDelete = async (orderId) => {
     const confirmed = await Helpers.showConfirm(
       "This will move the order to Deleted tab. Continue?",
-      "Delete Order"
+      "Delete Order",
     );
     if (!confirmed) return;
 
@@ -127,7 +130,7 @@ export default function OrdersView({ onOpenOrder }) {
             >
               {t}
             </button>
-          )
+          ),
         )}
       </div>
 
@@ -142,7 +145,10 @@ export default function OrdersView({ onOpenOrder }) {
           }}
         />
 
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
           <option value="">All Status</option>
           <option value="pending">Pending</option>
           <option value="delivered">Delivered</option>
@@ -187,25 +193,24 @@ export default function OrdersView({ onOpenOrder }) {
             </tr>
           </thead>
 
-         <tbody>
-         {pageOrders.map((order) => (
-            <OrderRow
+          <tbody>
+            {pageOrders.map((order) => (
+              <OrderRow
                 key={order.id}
                 order={order}
                 onView={onOpenOrder}
                 onDelete={handleDelete}
                 onStatusChange={async (id, status) => {
-                    await Helpers.ipcInvoke("update-order-status", id, status);
-                    refresh();
+                  await Helpers.ipcInvoke("update-order-status", id, status);
+                  refresh();
                 }}
                 onPaymentStatusChange={async (id, status) => {
-                    await Helpers.ipcInvoke("update-payment-status", id, status);
-                    refresh();
+                  await Helpers.ipcInvoke("update-payment-status", id, status);
+                  refresh();
                 }}
-            />
-         ))}
-        </tbody>
-
+              />
+            ))}
+          </tbody>
         </table>
       )}
 
@@ -232,7 +237,7 @@ export default function OrdersView({ onOpenOrder }) {
         onClose={() => setSelectedOrder(null)}
         onOrderUpdated={(updated) => {
           setOrders((prev) =>
-            prev.map((o) => (o.id === updated.id ? updated : o))
+            prev.map((o) => (o.id === updated.id ? updated : o)),
           );
           setSelectedOrder(updated);
         }}

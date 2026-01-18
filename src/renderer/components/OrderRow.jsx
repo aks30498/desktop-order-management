@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Helpers from "@/utils/helpers";
 
 export default function OrderRow({
   order,
@@ -25,8 +26,7 @@ export default function OrderRow({
   };
 
   const togglePayment = async () => {
-    const newStatus =
-      order.payment_status === "pending" ? "done" : "pending";
+    const newStatus = order.payment_status === "pending" ? "done" : "pending";
 
     try {
       setPaymentLoading(true);
@@ -48,22 +48,14 @@ export default function OrderRow({
   };
 
   return (
-    <tr
-      className={`order-row${order.deleted ? " order-row-deleted" : ""}`}
-    >
+    <tr className={`order-row${order.deleted ? " order-row-deleted" : ""}`}>
       <td className="order-id">#{order.id}</td>
 
-      <td className="order-customer">
-        {order.customer_name}
-      </td>
+      <td className="order-customer">{order.customer_name}</td>
 
-      <td className="order-phone">
-        {order.phone_number}
-      </td>
+      <td className="order-phone">{order.phone_number}</td>
 
-      <td className="order-date">
-        {Helpers.formatDate(order.order_date)}
-      </td>
+      <td className="order-date">{Helpers.formatDate(order.order_date)}</td>
 
       <td className="order-time">{order.order_time}</td>
 
@@ -116,8 +108,8 @@ export default function OrderRow({
                 {statusLoading
                   ? "Updating..."
                   : order.status === "pending"
-                  ? "Mark Delivered"
-                  : "Mark Pending"}
+                    ? "Mark Delivered"
+                    : "Mark Pending"}
               </button>
 
               <button
@@ -128,8 +120,8 @@ export default function OrderRow({
                 {paymentLoading
                   ? "Updating..."
                   : order.payment_status === "pending"
-                  ? "Mark Payment Done"
-                  : "Mark Payment Pending"}
+                    ? "Mark Payment Done"
+                    : "Mark Payment Pending"}
               </button>
 
               <button

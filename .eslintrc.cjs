@@ -42,5 +42,5 @@ module.exports = {
     "no-undef": "off",
   },
 
-  ignorePatterns: ["dist", "node_modules", "build", "out"],
+  ignorePatterns: ["dist", "node_modules", "build", "out", ".vscode", "*.json"],
 };
