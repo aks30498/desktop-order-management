@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import Helpers from "@/utils/helpers";
 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Command, CommandList, CommandItem } from "@/components/ui/command";
+
+import { X } from "lucide-react";
+
 const initialForm = {
   customerName: "",
   phoneNumber: "",
@@ -23,6 +31,14 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   const fileInputRef = useRef();
 
   // --------------------
+  // Customer autocomplete state
+  // --------------------
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  // --------------------
   // Initialize date + time
   // --------------------
   useEffect(() => {
@@ -34,22 +50,29 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   }, []);
 
   // --------------------
+  // Debounced customer search
+  // --------------------
+  useEffect(() => {
+    if (!customerQuery || selectedCustomer) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setLoadingSuggestions(true);
+        const results = await fakeSearchCustomers(customerQuery);
+        setCustomerSuggestions(results);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [customerQuery, selectedCustomer]);
+
+  // --------------------
   // Helpers
   // --------------------
   const update = (key, value) => {
     setForm((f) => ({ ...f, [key]: value }));
-  };
-
-  const showError = (field, message) => {
-    setErrors((e) => ({ ...e, [field]: message }));
-  };
-
-  const clearError = (field) => {
-    setErrors((e) => {
-      const copy = { ...e };
-      delete copy[field];
-      return copy;
-    });
   };
 
   // --------------------
@@ -76,20 +99,31 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   };
 
   // --------------------
-  // Phone formatting
+  // Customer selection
   // --------------------
-  const handlePhoneChange = (value) => {
-    const formatted = Helpers.formatPhone(value);
-    update("phoneNumber", formatted);
+  const handleCustomerSelect = (customer) => {
+    setSelectedCustomer(customer);
+    setCustomerSuggestions([]);
+    setCustomerQuery("");
+
+    update("customerName", customer.name);
+    update("phoneNumber", customer.phone);
+    update("address", customer.address ?? "");
+  };
+
+  const clearSelectedCustomer = () => {
+    setSelectedCustomer(null);
+    setCustomerSuggestions([]);
+    setCustomerQuery("");
+
+    update("customerName", "");
+    update("phoneNumber", "");
+    update("address", "");
   };
 
   // --------------------
   // Image handling
   // --------------------
-  const openFilePicker = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleFile = async (file) => {
     if (!Helpers.validateImage(file)) {
       notifications.error("Invalid image file");
@@ -102,7 +136,6 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
     setSelectedImage(resized);
     setSelectedImagePath(null);
     setPreviewUrl(dataUrl);
-    clearError("image");
   };
 
   const handleDrop = async (e) => {
@@ -164,16 +197,27 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
         imagePath = result.imagePath;
       }
 
-      const orderData = {
-        ...form,
-        imagePath,
-      };
+      if (!selectedCustomer) {
+        const customer = await fakeCreateCustomer({
+          name: form.customerName,
+          phone: form.phoneNumber,
+          address: form.address,
+        });
 
-      const addResult = await Helpers.ipcInvoke("add-order", orderData);
-      if (!addResult.success) throw new Error(addResult.error);
+        await fakeCreateOrder({
+          customerId: customer.id,
+          ...form,
+          imagePath,
+        });
+      } else {
+        await fakeCreateOrder({
+          customerId: selectedCustomer.id,
+          ...form,
+          imagePath,
+        });
+      }
 
       notifications.success("Order added");
-
       onOrderCreated?.();
       onClose();
     } catch (err) {
@@ -185,165 +229,216 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   };
 
   // --------------------
-  // Cancel
-  // --------------------
-  const handleCancel = () => {
-    const hasData =
-      Object.values(form).some(Boolean) || selectedImage || selectedImagePath;
-
-    if (hasData) {
-      const confirmed = confirm("Discard entered data?");
-      if (!confirmed) return;
-    }
-
-    onClose();
-  };
-
-  // --------------------
   // Render
   // --------------------
   return (
-    <div className="order-form-view">
-      <div className="form-header">
-        <h2>Add New Order</h2>
-        <button className="btn btn-secondary" onClick={handleCancel}>
-          Cancel
-        </button>
-      </div>
+    <div className="flex justify-center p-6">
+      <Card className="w-full max-w-4xl">
+        <CardHeader>
+          <CardTitle className="text-2xl">Add New Order</CardTitle>
+        </CardHeader>
 
-      <div className="order-form">
-        <div className="form-grid">
-          {/* Customer */}
+        <CardContent className="space-y-6">
+          {/* Customer Name */}
           <Field label="Customer Name *" error={errors.customerName}>
-            <input
-              className="form-input"
-              value={form.customerName}
-              onChange={(e) => update("customerName", e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                value={form.customerName}
+                placeholder="Start typing customer name..."
+                disabled={!!selectedCustomer}
+                onChange={(e) => {
+                  update("customerName", e.target.value);
+                  setCustomerQuery(e.target.value);
+                }}
+              />
+
+              {selectedCustomer && (
+                <button
+                  type="button"
+                  onClick={clearSelectedCustomer}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X size={16} />
+                </button>
+              )}
+
+              {!selectedCustomer && customerSuggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow">
+                  <Command>
+                    <CommandList>
+                      {customerSuggestions.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          onSelect={() => handleCustomerSelect(c)}
+                          className="flex justify-between"
+                        >
+                          <span>{c.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {c.phone}
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandList>
+                  </Command>
+                </div>
+              )}
+
+              {loadingSuggestions && (
+                <div className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  Searching...
+                </div>
+              )}
+            </div>
           </Field>
 
-          {/* Phone */}
-          <Field label="Phone Number *" error={errors.phoneNumber}>
-            <input
-              className="form-input"
-              value={form.phoneNumber}
-              onChange={(e) => handlePhoneChange(e.target.value)}
-            />
-          </Field>
+          {/* Phone + Address */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Phone Number *" error={errors.phoneNumber}>
+              <Input
+                value={form.phoneNumber}
+                disabled={!!selectedCustomer}
+                onChange={(e) =>
+                  update("phoneNumber", Helpers.formatPhone(e.target.value))
+                }
+              />
+            </Field>
 
-          {/* Date */}
-          <Field label="Order Date *" error={errors.orderDate}>
-            <input
-              type="date"
-              className="form-input"
-              value={form.orderDate}
-              onChange={(e) => update("orderDate", e.target.value)}
-            />
-          </Field>
+            <Field label="Address">
+              <Input
+                value={form.address}
+                disabled={!!selectedCustomer}
+                onChange={(e) => update("address", e.target.value)}
+              />
+            </Field>
+          </div>
 
-          {/* Time */}
-          <Field label="Order Time *" error={errors.orderTime}>
-            <input
-              className="form-input"
-              value={form.orderTime}
-              onChange={(e) => update("orderTime", e.target.value)}
-            />
-          </Field>
+          {/* Date + Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Order Date *" error={errors.orderDate}>
+              <Input
+                type="date"
+                value={form.orderDate}
+                onChange={(e) => update("orderDate", e.target.value)}
+              />
+            </Field>
 
-          {/* Weight */}
-          <Field label="Weight">
-            <input
-              className="form-input"
-              value={form.weight}
-              onChange={(e) => update("weight", e.target.value)}
-            />
-          </Field>
-
-          {/* Address */}
-          <Field label="Address">
-            <input
-              className="form-input"
-              value={form.address}
-              onChange={(e) => update("address", e.target.value)}
-            />
-          </Field>
+            <Field label="Order Time *" error={errors.orderTime}>
+              <Input
+                value={form.orderTime}
+                onChange={(e) => update("orderTime", e.target.value)}
+              />
+            </Field>
+          </div>
 
           {/* Notes */}
-          <div className="form-group full-width">
-            <label>Order Notes</label>
-            <textarea
-              className="form-textarea"
+          <Field label="Order Notes">
+            <Textarea
               rows={3}
               value={form.orderNotes}
               onChange={(e) => update("orderNotes", e.target.value)}
             />
-          </div>
+          </Field>
 
           {/* Image */}
           <div
-            className="form-group full-width image-upload-area"
+            className="rounded-md border border-dashed p-4 text-center"
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
           >
             {!previewUrl && (
-              <div className="upload-placeholder">
-                <p>Drag image or select</p>
-                <button
+              <>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Drag image or select
+                </p>
+                <Button
+                  variant="secondary"
                   type="button"
-                  className="btn btn-secondary"
                   onClick={selectFromSystem}
                 >
                   Select Image
-                </button>
-              </div>
+                </Button>
+              </>
             )}
 
             {previewUrl && (
-              <div className="image-preview">
-                <img src={previewUrl} />
-                <button className="btn-remove-image" onClick={removeImage}>
-                  ×
+              <div className="relative inline-block">
+                <img src={previewUrl} className="max-h-40 rounded" />
+                <button
+                  onClick={removeImage}
+                  className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-white"
+                >
+                  <X size={14} />
                 </button>
               </div>
             )}
           </div>
-        </div>
 
-        <div className="form-actions">
-          <button className="btn btn-secondary" onClick={handleCancel}>
-            Cancel
-          </button>
+          {/* Actions */}
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
 
-          <button
-            className="btn btn-primary"
-            disabled={isSubmitting}
-            onClick={handleSubmit}
-          >
-            {isSubmitting ? "Adding..." : "Add Order"}
-          </button>
-        </div>
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? "Adding..." : "Add Order"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          hidden
-          accept="image/*"
-          onChange={(e) => handleFile(e.target.files[0])}
-        />
-      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        accept="image/*"
+        onChange={(e) => handleFile(e.target.files[0])}
+      />
     </div>
   );
 }
 
 // --------------------
-// Small helper component
+// Field wrapper
 // --------------------
 function Field({ label, error, children }) {
   return (
-    <div className="form-group">
-      <label>{label}</label>
+    <div className="space-y-1">
+      <label className="text-sm font-medium">{label}</label>
       {children}
-      {error && <span className="error-message">{error}</span>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
+}
+
+// --------------------
+// Placeholder APIs
+// --------------------
+async function fakeSearchCustomers(query) {
+  await Helpers.delay(400);
+
+  return [
+    {
+      id: 1,
+      name: "Rahul Sharma",
+      phone: "9876543210",
+      address: "Jaipur",
+    },
+    {
+      id: 2,
+      name: "Amit Verma",
+      phone: "9123456789",
+      address: "Delhi",
+    },
+  ].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+}
+
+async function fakeCreateCustomer(payload) {
+  console.log("Creating customer:", payload);
+  await Helpers.delay(500);
+  return { id: Date.now(), ...payload };
+}
+
+async function fakeCreateOrder(payload) {
+  console.log("Creating order:", payload);
+  await Helpers.delay(500);
 }

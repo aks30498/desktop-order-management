@@ -1,5 +1,14 @@
 import { useState } from "react";
 import Helpers from "@/utils/helpers";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
+import { TableRow, TableCell } from "@/components/ui/table";
+import { Badge } from "./ui/badge";
 
 export default function OrderRow({
   order,
@@ -14,12 +23,9 @@ export default function OrderRow({
 
   const toggleStatus = async () => {
     const newStatus = order.status === "pending" ? "delivered" : "pending";
-
     try {
       setStatusLoading(true);
       await onStatusChange(order.id, newStatus);
-    } catch {
-      notifications.error("Failed to update order status");
     } finally {
       setStatusLoading(false);
     }
@@ -27,12 +33,9 @@ export default function OrderRow({
 
   const togglePayment = async () => {
     const newStatus = order.payment_status === "pending" ? "done" : "pending";
-
     try {
       setPaymentLoading(true);
       await onPaymentStatusChange(order.id, newStatus);
-    } catch {
-      notifications.error("Failed to update payment status");
     } finally {
       setPaymentLoading(false);
     }
@@ -48,93 +51,98 @@ export default function OrderRow({
   };
 
   return (
-    <tr className={`order-row${order.deleted ? " order-row-deleted" : ""}`}>
-      <td className="order-id">#{order.id}</td>
+    <TableRow
+      className={`${order.deleted ? "opacity-60" : ""} hover:bg-muted/50 transition-colors cursor-pointer`}
+    >
+      <TableCell className="font-mono">#{order.id}</TableCell>
 
-      <td className="order-customer">{order.customer_name}</td>
+      <TableCell className="font-medium">{order.customer_name}</TableCell>
 
-      <td className="order-phone">{order.phone_number}</td>
+      <TableCell className="whitespace-nowrap">{order.phone_number}</TableCell>
 
-      <td className="order-date">{Helpers.formatDate(order.order_date)}</td>
+      <TableCell className="whitespace-nowrap">
+        {Helpers.formatDate(order.order_date)}
+      </TableCell>
 
-      <td className="order-time">{order.order_time}</td>
+      <TableCell className="whitespace-nowrap">{order.order_time}</TableCell>
 
-      <td className={`order-status ${order.status}`}>
-        <div className="status-label">{order.status}</div>
-
+      <TableCell>
+        <div className="capitalize">{order.status}</div>
         {order.status === "delivered" && order.delivered_at && (
-          <div className="status-meta">
+          <div className="text-xs text-muted-foreground">
             {Helpers.formatDateTimeDisplay(order.delivered_at)}
           </div>
         )}
+      </TableCell>
 
-        {order.deleted && order.deleted_at && (
-          <div className="status-meta">
-            Deleted {Helpers.formatDateTimeDisplay(order.deleted_at)}
-          </div>
+      <TableCell className="capitalize">
+        {order.payment_status === "pending" ? (
+          <Badge variant="secondary">Pending</Badge>
+        ) : (
+          <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+            Done
+          </Badge>
         )}
-      </td>
+      </TableCell>
 
-      <td className={`order-payment-status ${order.payment_status}`}>
-        {order.payment_status}
-      </td>
-
-      <td className="image-cell">
+      <TableCell>
         {order.image_path ? (
           <button
-            className="btn-link"
-            onClick={() => window.open(order.image_path, "_blank")}
+            className="text-primary underline-offset-4 hover:underline"
+            onClick={() => Helpers.ipcInvoke("open-file", order.image_path)}
           >
             View Image
           </button>
         ) : (
-          "-"
+          <span className="text-muted-foreground">—</span>
         )}
-      </td>
+      </TableCell>
 
-      <td className="table-actions">
-        <div className="table-actions-container">
-          <button className="btn-link" onClick={() => onView(order)}>
-            View
-          </button>
+      <TableCell className="text-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="h-8 w-8 rounded-md border hover:bg-muted flex items-center justify-center">
+              <MoreHorizontal size={16} />
+            </button>
+          </DropdownMenuTrigger>
 
-          {!order.deleted && (
-            <>
-              <button
-                className="btn-link"
-                disabled={statusLoading}
-                onClick={toggleStatus}
-              >
-                {statusLoading
-                  ? "Updating..."
-                  : order.status === "pending"
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onView(order)}>
+              View
+            </DropdownMenuItem>
+
+            {!order.deleted && (
+              <>
+                <DropdownMenuItem
+                  disabled={statusLoading}
+                  onClick={toggleStatus}
+                >
+                  {order.status === "pending"
                     ? "Mark Delivered"
                     : "Mark Pending"}
-              </button>
+                </DropdownMenuItem>
 
-              <button
-                className="btn-link"
-                disabled={paymentLoading}
-                onClick={togglePayment}
-              >
-                {paymentLoading
-                  ? "Updating..."
-                  : order.payment_status === "pending"
+                <DropdownMenuItem
+                  disabled={paymentLoading}
+                  onClick={togglePayment}
+                >
+                  {order.payment_status === "pending"
                     ? "Mark Payment Done"
                     : "Mark Payment Pending"}
-              </button>
+                </DropdownMenuItem>
 
-              <button
-                className="btn-link"
-                disabled={deleteLoading}
-                onClick={handleDelete}
-              >
-                {deleteLoading ? "Deleting..." : "Delete"}
-              </button>
-            </>
-          )}
-        </div>
-      </td>
-    </tr>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  disabled={deleteLoading}
+                  onClick={handleDelete}
+                >
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
   );
 }

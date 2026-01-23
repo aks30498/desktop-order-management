@@ -71,6 +71,8 @@ class OrderManagementApp {
         nodeIntegration: true,
         contextIsolation: false,
         enableRemoteModule: true,
+        // webSecurity: false,
+        // allowRunningInsecureContent: true,
       },
       icon: path.join(__dirname, "../../assets/icon.png"),
       show: false,
@@ -80,7 +82,7 @@ class OrderManagementApp {
       this.mainWindow.loadURL("http://localhost:5173");
     } else {
       this.mainWindow.loadFile(
-        path.join(__dirname, "../../dist-renderer/index.html")
+        path.join(__dirname, "../../dist-renderer/index.html"),
       );
     }
 
@@ -455,7 +457,7 @@ class OrderManagementApp {
         }
         const outputPath = path.join(
           app.getPath("temp"),
-          `order-${orderId}-slips.pdf`
+          `order-${orderId}-slips.pdf`,
         );
         await printService.printToPDF(order, outputPath);
         return { success: true, pdfPath: outputPath };
@@ -507,7 +509,7 @@ class OrderManagementApp {
         }
         const outputPath = path.join(
           app.getPath("temp"),
-          `order-${orderId}-preview.pdf`
+          `order-${orderId}-preview.pdf`,
         );
         const result = await printService.previewPDF(order, outputPath);
         return { success: true, filePath: result.path };
@@ -582,7 +584,7 @@ class OrderManagementApp {
     } catch (error) {
       dialog.showErrorBox(
         "Export Failed",
-        `Failed to export data: ${error.message}`
+        `Failed to export data: ${error.message}`,
       );
     }
   }
@@ -595,7 +597,7 @@ class OrderManagementApp {
         res.setHeader("Access-Control-Allow-Methods", "GET");
         res.setHeader("Access-Control-Allow-Headers", "Content-Type"); // Handle order image requests
         const orderImageMatch = parsedUrl.pathname.match(
-          /^\/order-image\/(\d+)$/
+          /^\/order-image\/(\d+)$/,
         );
         if (orderImageMatch) {
           const orderId = parseInt(orderImageMatch[1], 10);
@@ -607,7 +609,7 @@ class OrderManagementApp {
       });
       this.imageServer.listen(this.serverPort, "localhost", () => {
         console.log(
-          `📷 Image server started on http://localhost:${this.serverPort}`
+          `📷 Image server started on http://localhost:${this.serverPort}`,
         ); // Make the port available globally
         global.imageServerPort = this.serverPort;
       });
@@ -616,7 +618,7 @@ class OrderManagementApp {
           console.log(
             `Port ${this.serverPort} is in use, trying port ${
               this.serverPort + 1
-            }`
+            }`,
           );
           this.serverPort += 1;
           global.imageServerPort = this.serverPort;

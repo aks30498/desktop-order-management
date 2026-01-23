@@ -1,31 +1,23 @@
 import { useEffect, useRef, useState } from "react";
+import Helpers from "@/utils/helpers";
 
-export default function OrderDetailModal({
-  order,
-  onClose,
-  onOrderUpdated,
-}) {
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+
+export default function OrderDetailModal({ order, onClose, onOrderUpdated }) {
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [previewing, setPreviewing] = useState(false);
 
   const barcodeRef = useRef(null);
-
-  // --------------------
-  // ESC to close
-  // --------------------
-  useEffect(() => {
-    if (!order) return;
-
-    const onKey = (e) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [order, onClose]);
 
   // --------------------
   // Generate barcode
@@ -39,6 +31,7 @@ export default function OrderDetailModal({
         .getTime()
         .toString()
         .slice(-6);
+
       const paddedId = String(order.id).padStart(4, "0");
       const barcodeValue = `ORD${paddedId}${timestamp}`;
 
@@ -54,15 +47,10 @@ export default function OrderDetailModal({
           height: 50,
           displayValue: true,
           fontSize: 10,
-          textPosition: "bottom",
           margin: 5,
         });
       } else {
-        barcodeRef.current.innerHTML = `
-          <div style="padding:8px;border:1px solid #ccc;font-size:12px">
-            ${barcodeValue}
-          </div>
-        `;
+        barcodeRef.current.innerHTML = barcodeValue;
       }
     } catch (err) {
       console.error("Barcode generation failed", err);
@@ -77,13 +65,13 @@ export default function OrderDetailModal({
   const toggleStatus = async () => {
     try {
       setLoadingStatus(true);
-      const newStatus =
-        order.status === "pending" ? "delivered" : "pending";
+
+      const newStatus = order.status === "pending" ? "delivered" : "pending";
 
       const result = await Helpers.ipcInvoke(
         "update-order-status",
         order.id,
-        newStatus
+        newStatus,
       );
 
       if (!result.success) throw new Error(result.error);
@@ -114,10 +102,7 @@ export default function OrderDetailModal({
   const handlePreviewPdf = async () => {
     try {
       setPreviewing(true);
-      const result = await Helpers.ipcInvoke(
-        "preview-order-pdf",
-        order.id
-      );
+      const result = await Helpers.ipcInvoke("preview-order-pdf", order.id);
       if (!result.success) throw new Error(result.error);
       notifications.success("PDF preview opened");
     } catch {
@@ -129,44 +114,60 @@ export default function OrderDetailModal({
 
   const viewImageFullscreen = () => {
     if (!order.image_path) return;
-    window.open(`file://${order.image_path}`, "_blank");
+    Helpers.ipcInvoke("open-file", order.image_path);
   };
 
   // --------------------
   // Render
   // --------------------
   return (
-    <div className="order-detail-overlay">
-      <div className="order-detail-modal">
-        <div className="detail-summary">
+    <Dialog open={!!order} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            Order #{order.id}
+            <Badge variant={order.status === "delivered" ? "" : "primary"}>
+              {order.status[0].toUpperCase() + order.status.substring(1)}
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Customer Info */}
+        <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <h2>Order #{order.id}</h2>
-            {order.status === "delivered" && order.delivered_at && (
-              <div className="detail-chip delivered">
-                Delivered{" "}
-                {Helpers.formatDateTimeDisplay(order.delivered_at)}
-              </div>
-            )}
+            <div className="text-muted-foreground">Customer</div>
+            <div className="font-medium">{order.customer_name}</div>
           </div>
 
-          <button className="btn btn-secondary" onClick={onClose}>
-            Close
-          </button>
+          <div>
+            <div className="text-muted-foreground">Phone</div>
+            <div>{order.phone_number}</div>
+          </div>
+
+          {order.weight && (
+            <div>
+              <div className="text-muted-foreground">Weight</div>
+              <div>{order.weight}</div>
+            </div>
+          )}
+
+          {order.address && (
+            <div>
+              <div className="text-muted-foreground">Address</div>
+              <div>{order.address}</div>
+            </div>
+          )}
         </div>
 
-        {/* Customer */}
-        <div className="customer-info">
-          <div>Customer: {order.customer_name}</div>
-          <div>Phone: {order.phone_number}</div>
-          {order.weight && <div>Weight: {order.weight}</div>}
-          {order.address && <div>Address: {order.address}</div>}
-        </div>
+        <Separator />
 
         {/* Notes */}
         {order.order_notes && (
-          <div className="detail-section">
-            <div className="detail-label">Notes</div>
-            <div className="detail-value">{order.order_notes}</div>
+          <div>
+            <div className="text-muted-foreground text-sm mb-1">Notes</div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              {order.order_notes}
+            </div>
           </div>
         )}
 
@@ -176,8 +177,9 @@ export default function OrderDetailModal({
             <div className="image-container">
               <img
                 src={`file://${order.image_path}`}
-                className="detail-image"
+                className="detail-image cursor-pointer rounded-lg"
                 onClick={viewImageFullscreen}
+                alt="Order requirement"
               />
             </div>
 
@@ -192,37 +194,31 @@ export default function OrderDetailModal({
           </div>
         )}
 
-        {/* Actions */}
-        <div className="detail-actions">
-          <button
-            className="btn btn-primary"
-            disabled={loadingStatus}
-            onClick={toggleStatus}
-          >
-            {loadingStatus
-              ? "Updating..."
-              : order.status === "pending"
-              ? "Mark Delivered"
-              : "Mark Pending"}
-          </button>
+        <Separator />
 
-          <button
-            className="btn btn-secondary"
+        {/* Actions */}
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="outline"
             disabled={previewing}
             onClick={handlePreviewPdf}
           >
             Preview PDF
-          </button>
+          </Button>
 
-          <button
-            className="btn btn-secondary"
-            disabled={printing}
-            onClick={handlePrint}
-          >
+          <Button variant="outline" disabled={printing} onClick={handlePrint}>
             Print
-          </button>
+          </Button>
+
+          <Button disabled={loadingStatus} onClick={toggleStatus}>
+            {loadingStatus
+              ? "Updating..."
+              : order.status === "pending"
+                ? "Mark Delivered"
+                : "Mark Pending"}
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

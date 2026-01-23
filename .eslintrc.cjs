@@ -39,7 +39,7 @@ module.exports = {
     "no-console": "off",
 
     // Electron preload globals etc
-    "no-undef": "off",
+    "no-undef": "error",
   },
 
   ignorePatterns: ["dist", "node_modules", "build", "out", ".vscode", "*.json"],

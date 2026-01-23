@@ -1,25 +1,22 @@
+import { Button } from "@/components/ui/button";
+
 export default function Header({ onNewOrder, onScanBarcode, onHome }) {
   return (
-    <header className="app-header">
-      <div className="header-content">
+    <header className="border-b bg-background">
+      <div className="flex h-14 items-center justify-between px-6">
         <h1
-          className="app-title"
-          style={{ cursor: "pointer" }}
+          className="cursor-pointer text-lg font-semibold tracking-tight"
           onClick={onHome}
         >
           Desktop Order Management
         </h1>
 
-        <div className="header-actions">
-          <button className="btn btn-primary" onClick={onNewOrder}>
-            <span className="icon">add</span>
-            New Order
-          </button>
+        <div className="flex items-center gap-2">
+          <Button onClick={onNewOrder}>New Order</Button>
 
-          <button className="btn btn-secondary" onClick={onScanBarcode}>
-            <span className="icon">qr_code_scanner</span>
+          <Button variant="secondary" onClick={onScanBarcode}>
             Scan Barcode
-          </button>
+          </Button>
         </div>
       </div>
     </header>
