@@ -1,23 +1,39 @@
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-export default function Header({ onNewOrder, onScanBarcode, onHome }) {
+export default function Header() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   return (
-    <header className="border-b bg-background">
-      <div className="flex h-14 items-center justify-between px-6">
-        <h1
-          className="cursor-pointer text-lg font-semibold tracking-tight"
-          onClick={onHome}
+    <header className="border-b px-4 h-14 flex items-center justify-between">
+      <div
+        className="font-semibold cursor-pointer"
+        onClick={() => navigate("/orders")}
+      >
+        Desktop Order Management
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant={
+            location.pathname.startsWith("/orders") ? "default" : "ghost"
+          }
+          onClick={() => navigate("/orders")}
         >
-          Desktop Order Management
-        </h1>
+          Orders
+        </Button>
 
-        <div className="flex items-center gap-2">
-          <Button onClick={onNewOrder}>New Order</Button>
+        <Button
+          variant={
+            location.pathname.startsWith("/customers") ? "default" : "ghost"
+          }
+          onClick={() => navigate("/customers")}
+        >
+          Customers
+        </Button>
 
-          <Button variant="secondary" onClick={onScanBarcode}>
-            Scan Barcode
-          </Button>
-        </div>
+        <Button onClick={() => navigate("/orders/new")}>New Order</Button>
       </div>
     </header>
   );

@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-
+import { useNavigate } from "react-router-dom";
 import { Table, TableHeader, TableRow, TableHead, TableBody } from "./ui/table";
 
 const PAGE_SIZE = 10;
@@ -129,6 +129,8 @@ export default function OrdersView({ onOpenOrder }) {
     refresh();
   };
 
+  const navigate = useNavigate();
+
   // ----------------------
   // Render
   // ----------------------
@@ -228,7 +230,7 @@ export default function OrdersView({ onOpenOrder }) {
                 <OrderRow
                   key={order.id}
                   order={order}
-                  onView={onOpenOrder}
+                  onView={() => navigate(`/orders/${order.id}`)}
                   onDelete={handleDelete}
                   onStatusChange={async (id, status) => {
                     await Helpers.ipcInvoke("update-order-status", id, status);

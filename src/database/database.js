@@ -1,9 +1,9 @@
-// database.js 
+// database.js
 
-const initSqlJs = require('sql.js');
-const path = require('path');
-const fs = require('fs');
-const { app } = require('electron');
+const initSqlJs = require("sql.js");
+const path = require("path");
+const fs = require("fs");
+const { app } = require("electron");
 
 class OrderDatabase {
   constructor() {
@@ -16,20 +16,20 @@ class OrderDatabase {
     try {
       // Initialize sql.js
       this.SQL = await initSqlJs();
-      
-      const userDataPath = app.getPath('userData');
-      this.dbPath = path.join(userDataPath, 'orders.db');
-      
+
+      const userDataPath = app.getPath("userData");
+      this.dbPath = path.join(userDataPath, "orders.db");
+
       let dbData = null;
-      
+
       // Load existing database if it exists
       if (fs.existsSync(this.dbPath)) {
         dbData = fs.readFileSync(this.dbPath);
       }
-      
+
       // Create database instance
       this.db = new this.SQL.Database(dbData);
-      console.log('Connected to SQLite database');
+      console.log("Connected to SQLite database");
 
       // Create tables if database is new, or migrate existing database
       if (!dbData) {
@@ -40,7 +40,7 @@ class OrderDatabase {
 
       return true;
     } catch (error) {
-      console.error('Database initialization failed:', error);
+      console.error("Database initialization failed:", error);
       throw error;
     }
   }
@@ -50,12 +50,10 @@ class OrderDatabase {
       const createOrdersTable = `
         CREATE TABLE IF NOT EXISTS orders (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          customer_name TEXT NOT NULL,
-          phone_number TEXT NOT NULL,
+          customer_id INTEGER NOT NULL,
           order_date DATE NOT NULL,
           order_time TIME NOT NULL,
           weight TEXT,
-          address TEXT,
           image_path TEXT,
           order_notes TEXT,
           status TEXT DEFAULT 'pending',
@@ -64,64 +62,85 @@ class OrderDatabase {
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           delivered_at DATETIME,
           deleted INTEGER DEFAULT 0,
-          deleted_at DATETIME
+          deleted_at DATETIME,
+          FOREIGN KEY (customer_id) REFERENCES customers(id)
         )
       `;
 
+      const createCustomersTable = `
+        CREATE TABLE IF NOT EXISTS customers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          address TEXT,
+          contact TEXT NOT NULL,
+          alternate_contact TEXT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+
+      this.db.run(createCustomersTable);
+
       const createIndexes = [
-        'CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)',
-        'CREATE INDEX IF NOT EXISTS idx_customer_name ON orders(customer_name)',
-        'CREATE INDEX IF NOT EXISTS idx_phone_number ON orders(phone_number)',
-        'CREATE INDEX IF NOT EXISTS idx_status ON orders(status)',
-        'CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)'
+        "CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)",
+        "CREATE INDEX IF NOT EXISTS idx_customer_name ON orders(customer_name)",
+        "CREATE INDEX IF NOT EXISTS idx_phone_number ON orders(phone_number)",
+        "CREATE INDEX IF NOT EXISTS idx_status ON orders(status)",
+        "CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)",
       ];
 
       this.db.run(createOrdersTable);
-      createIndexes.forEach(indexSql => this.db.run(indexSql));
-      
-      console.log('Database tables created successfully');
+      createIndexes.forEach((indexSql) => this.db.run(indexSql));
+
+      console.log("Database tables created successfully");
       this.saveDatabase();
     } catch (error) {
-      console.error('Error creating tables:', error);
+      console.error("Error creating tables:", error);
       throw error;
     }
   }
 
   migrateDatabaseSchema() {
     try {
-      const tableInfo = this.db.exec('PRAGMA table_info(orders)');
-      const columns = tableInfo.length > 0
-        ? tableInfo[0].values.map(column => column[1])
-        : [];
+      const tableInfo = this.db.exec("PRAGMA table_info(orders)");
+      const columns =
+        tableInfo.length > 0
+          ? tableInfo[0].values.map((column) => column[1])
+          : [];
 
       const addColumn = (name, definition) => {
         console.log(`Adding column ${name} to orders table`);
         this.db.run(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
       };
 
-      if (!columns.includes('delivered_at')) {
-        addColumn('delivered_at', 'DATETIME');
-        this.db.run(`UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered'`);
+      if (!columns.includes("delivered_at")) {
+        addColumn("delivered_at", "DATETIME");
+        this.db.run(
+          `UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered'`,
+        );
       } else {
-        this.db.run(`UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered' AND (delivered_at IS NULL OR delivered_at = '')`);
+        this.db.run(
+          `UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered' AND (delivered_at IS NULL OR delivered_at = '')`,
+        );
       }
 
-      if (columns.includes('delivery_time')) {
-        this.db.run(`UPDATE orders SET delivered_at = COALESCE(delivered_at, delivery_time) WHERE delivery_time IS NOT NULL`);
+      if (columns.includes("delivery_time")) {
+        this.db.run(
+          `UPDATE orders SET delivered_at = COALESCE(delivered_at, delivery_time) WHERE delivery_time IS NOT NULL`,
+        );
       }
 
-      if (!columns.includes('deleted')) {
-        addColumn('deleted', 'INTEGER DEFAULT 0');
-        this.db.run('UPDATE orders SET deleted = 0');
+      if (!columns.includes("deleted")) {
+        addColumn("deleted", "INTEGER DEFAULT 0");
+        this.db.run("UPDATE orders SET deleted = 0");
       }
 
-      if (!columns.includes('deleted_at')) {
-        addColumn('deleted_at', 'DATETIME');
+      if (!columns.includes("deleted_at")) {
+        addColumn("deleted_at", "DATETIME");
       }
 
       this.saveDatabase();
     } catch (error) {
-      console.error('Error migrating database schema:', error);
+      console.error("Error migrating database schema:", error);
       throw error;
     }
   }
@@ -130,146 +149,182 @@ class OrderDatabase {
       const data = this.db.export();
       fs.writeFileSync(this.dbPath, data);
     } catch (error) {
-      console.error('Error saving database:', error);
+      console.error("Error saving database:", error);
     }
   }
 
   async addOrder(orderData) {
-    try {
-      const {
-        customerName,
-        phoneNumber,
-        orderDate,
-        orderTime,
-        weight = '',
-        address = '',
-        imagePath,
-        orderNotes = '',
-        paymentStatus = 'pending'
-      } = orderData;
+    const {
+      customerId,
+      customer, // { name, address, contact, alternateContact }
+      orderDate,
+      orderTime,
+      weight = "",
+      imagePath,
+      orderNotes = "",
+      paymentStatus = "pending",
+    } = orderData;
 
-      const sql = `
-        INSERT INTO orders (
-          customer_name, phone_number, order_date, order_time,
-          weight, address, image_path, order_notes, payment_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    try {
+      this.db.run("BEGIN TRANSACTION");
+
+      let finalCustomerId = customerId;
+
+      // 🧍 Create customer if not selected
+      if (!finalCustomerId) {
+        if (!customer?.name || !customer?.contact) {
+          throw new Error("Customer info missing for new customer");
+        }
+
+        const sqlCustomer = `
+        INSERT INTO customers (name, address, contact, alternate_contact, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
       `;
 
-      this.db.run(sql, [
-        customerName, phoneNumber, orderDate, orderTime,
-        weight, address, imagePath, orderNotes, paymentStatus
+        this.db.run(sqlCustomer, [
+          customer.name,
+          customer.address || "",
+          customer.contact,
+          customer.alternateContact || "",
+        ]);
+
+        const result = this.db.exec(`SELECT last_insert_rowid() as id`);
+        finalCustomerId = result[0].values[0][0];
+      }
+
+      // 📦 Create order
+      const sqlOrder = `
+      INSERT INTO orders (
+        customer_id, order_date, order_time,
+        weight, image_path, order_notes, payment_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+
+      this.db.run(sqlOrder, [
+        finalCustomerId,
+        orderDate,
+        orderTime,
+        weight,
+        imagePath,
+        orderNotes,
+        paymentStatus,
       ]);
-      
-      // Get the last inserted ID
-      const result = this.db.exec("SELECT last_insert_rowid() as id");
-      const lastId = result[0].values[0][0];
-      
+
+      const orderResult = this.db.exec(`SELECT last_insert_rowid() as id`);
+      const orderId = orderResult[0].values[0][0];
+
+      this.db.run("COMMIT");
       this.saveDatabase();
-      return lastId;
+
+      return orderId;
     } catch (error) {
-      console.error('Error adding order:', error);
+      this.db.run("ROLLBACK");
+      console.error("Error creating order transaction:", error);
       throw error;
     }
   }
 
   async getOrders(filter = {}) {
     try {
-      let sql = 'SELECT * FROM orders';
+      let sql = `SELECT orders.*, customers.name as customer_name, customers.contact, customers.address, customers.alternate_contact
+                FROM orders
+                JOIN customers ON customers.id = orders.customer_id
+                `;
       const params = [];
       const conditions = [];
 
       const includeDeleted = filter.includeDeleted === true;
 
-      if (Object.prototype.hasOwnProperty.call(filter, 'deleted')) {
-        conditions.push('deleted = ?');
+      if (Object.prototype.hasOwnProperty.call(filter, "deleted")) {
+        conditions.push("deleted = ?");
         params.push(filter.deleted ? 1 : 0);
       } else if (!includeDeleted) {
-        conditions.push('deleted = 0');
+        conditions.push("deleted = 0");
       }
 
       if (filter.status) {
-        conditions.push('status = ?');
+        conditions.push("status = ?");
         params.push(filter.status);
       }
 
       if (filter.paymentStatus) {
-        conditions.push('payment_status = ?');
+        conditions.push("payment_status = ?");
         params.push(filter.paymentStatus);
       }
 
       if (filter.date) {
-        conditions.push('order_date = ?');
+        conditions.push("order_date = ?");
         params.push(filter.date);
       }
 
       if (filter.dateRange) {
-        conditions.push('order_date BETWEEN ? AND ?');
+        conditions.push("order_date BETWEEN ? AND ?");
         params.push(filter.dateRange.start);
         params.push(filter.dateRange.end);
       }
 
       if (filter.search) {
-        conditions.push('(customer_name LIKE ? OR phone_number LIKE ?)');
+        conditions.push("(customer_name LIKE ? OR phone_number LIKE ?)");
         params.push(`%${filter.search}%`);
         params.push(`%${filter.search}%`);
       }
 
       if (conditions.length > 0) {
-        sql += ' WHERE ' + conditions.join(' AND ');
+        sql += " WHERE " + conditions.join(" AND ");
       }
 
-      sql += ' ORDER BY order_date DESC, order_time DESC';
+      sql += " ORDER BY order_date DESC, order_time DESC";
 
       if (filter.limit) {
-        sql += ' LIMIT ?';
+        sql += " LIMIT ?";
         params.push(filter.limit);
       }
 
       if (filter.offset) {
-        sql += ' OFFSET ?';
+        sql += " OFFSET ?";
         params.push(filter.offset);
       }
 
       const result = this.db.exec(sql, params);
-      
+
       if (result.length === 0) {
         return [];
       }
-      
+
       const columns = result[0].columns;
       const values = result[0].values;
-      
-      const orders = values.map(row => {
+
+      const orders = values.map((row) => {
         const obj = {};
         columns.forEach((col, index) => {
           obj[col] = row[index];
         });
         return obj;
       });
-      
+
       return orders;
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error("Error fetching orders:", error);
       return [];
     }
   }
 
   async getOrderById(id) {
     try {
-      const sql = 'SELECT * FROM orders WHERE id = ?';
+      const sql = "SELECT * FROM orders WHERE id = ?";
       const stmt = this.db.prepare(sql);
       stmt.bind([id]);
-      
+
       if (stmt.step()) {
         const row = stmt.getAsObject();
         stmt.free();
         return row;
       }
-      
+
       stmt.free();
       return null;
     } catch (error) {
-      console.error('Error fetching order:', error);
+      console.error("Error fetching order:", error);
       throw error;
     }
   }
@@ -287,23 +342,7 @@ class OrderDatabase {
       this.saveDatabase();
       return await this.getOrderById(id);
     } catch (error) {
-      console.error('Error updating order status:', error);
-      throw error;
-    }
-}
-
-  async updateOrderPaymentStatus(id, status) {
-    try {
-      const sql = `
-        UPDATE orders 
-        SET payment_status = ?, updated_at = datetime('now') 
-        WHERE id = ?
-      `;
-      this.db.run(sql, [status, id]);
-      this.saveDatabase();
-      return 1;
-    } catch (error) {
-      console.error('Error updating order status:', error);
+      console.error("Error updating order status:", error);
       throw error;
     }
   }
@@ -319,13 +358,13 @@ class OrderDatabase {
       this.saveDatabase();
       return 1;
     } catch (error) {
-      console.error('Error updating payment status:', error);
+      console.error("Error updating payment status:", error);
       throw error;
     }
   }
 
   async getTodaysOrders() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
     return this.getOrders({ date: today });
   }
 
@@ -338,74 +377,74 @@ class OrderDatabase {
 
     return this.getOrders({
       dateRange: {
-        start: weekStart.toISOString().split('T')[0],
-        end: weekEnd.toISOString().split('T')[0]
-      }
+        start: weekStart.toISOString().split("T")[0],
+        end: weekEnd.toISOString().split("T")[0],
+      },
     });
   }
 
   async getOrderCount(filter = {}) {
     try {
-      let sql = 'SELECT COUNT(*) as count FROM orders';
+      let sql = "SELECT COUNT(*) as count FROM orders";
       const params = [];
       const conditions = [];
 
       const includeDeleted = filter.includeDeleted === true;
 
-      if (Object.prototype.hasOwnProperty.call(filter, 'deleted')) {
-        conditions.push('deleted = ?');
+      if (Object.prototype.hasOwnProperty.call(filter, "deleted")) {
+        conditions.push("deleted = ?");
         params.push(filter.deleted ? 1 : 0);
       } else if (!includeDeleted) {
-        conditions.push('deleted = 0');
+        conditions.push("deleted = 0");
       }
 
       if (filter.status) {
-        conditions.push('status = ?');
+        conditions.push("status = ?");
         params.push(filter.status);
       }
 
       if (filter.paymentStatus) {
-        conditions.push('payment_status = ?');
+        conditions.push("payment_status = ?");
         params.push(filter.paymentStatus);
       }
 
       if (filter.search) {
-        conditions.push('(customer_name LIKE ? OR phone_number LIKE ?)');
+        conditions.push("(customer_name LIKE ? OR phone_number LIKE ?)");
         params.push(`%${filter.search}%`);
         params.push(`%${filter.search}%`);
       }
 
       if (conditions.length > 0) {
-        sql += ' WHERE ' + conditions.join(' AND ');
+        sql += " WHERE " + conditions.join(" AND ");
       }
 
       const stmt = this.db.prepare(sql);
       stmt.bind(params);
-      
+
       if (stmt.step()) {
         const row = stmt.getAsObject();
         stmt.free();
         return row.count;
       }
-      
+
       stmt.free();
       return 0;
     } catch (error) {
-      console.error('Error counting orders:', error);
+      console.error("Error counting orders:", error);
       throw error;
     }
   }
 
   async clearAllData() {
     try {
-      console.log('Clearing all data from database...');
-      this.db.run('DELETE FROM orders');
+      console.log("Clearing all data from database...");
+      this.db.run("DELETE FROM orders");
       this.db.run("DELETE FROM sqlite_sequence WHERE name='orders'");
-      console.log('All data cleared successfully');
+      console.log("All data cleared successfully");
       this.saveDatabase();
-      return { success: true, message: 'All data cleared successfully' };
+      return { success: true, message: "All data cleared successfully" };
     } catch (error) {
-      console.error('Error clearing data:', error);
+      console.error("Error clearing data:", error);
       throw error;
     }
   }
@@ -423,9 +462,50 @@ class OrderDatabase {
       this.saveDatabase();
       return await this.getOrderById(id);
     } catch (error) {
-      console.error('Error deleting order:', error);
+      console.error("Error deleting order:", error);
       throw error;
     }
+  }
+
+  async createCustomer({ name, address, contact, alternateContact }) {
+    try {
+      const sql = `
+      INSERT INTO customers (name, address, contact, alternate_contact, updated_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+    `;
+
+      this.db.run(sql, [name, address || "", contact, alternateContact || ""]);
+
+      const result = this.db.exec(`SELECT last_insert_rowid() as id`);
+      const id = result[0].values[0][0];
+
+      this.saveDatabase();
+      return id;
+    } catch (err) {
+      console.error("Error creating customer:", err);
+      throw err;
+    }
+  }
+
+  async searchCustomers(search) {
+    const sql = `
+    SELECT *
+    FROM customers
+    WHERE name LIKE ? OR contact LIKE ?
+    ORDER BY updated_at DESC
+    LIMIT 10
+  `;
+
+    const stmt = this.db.prepare(sql);
+    stmt.bind([`%${search}%`, `%${search}%`]);
+
+    const rows = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject());
+    }
+    stmt.free();
+
+    return rows;
   }
 
   close() {
@@ -433,9 +513,9 @@ class OrderDatabase {
       try {
         this.saveDatabase();
         this.db.close();
-        console.log('Database connection closed');
+        console.log("Database connection closed");
       } catch (error) {
-        console.error('Error closing database:', error);
+        console.error("Error closing database:", error);
       }
     }
   }
