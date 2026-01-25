@@ -518,6 +518,27 @@ class OrderManagementApp {
         return { success: false, error: error.message };
       }
     });
+
+    ipcMain.handle("search-customers", async (_event, search) => {
+      try {
+        if (!search || !search.trim()) {
+          return { success: true, customers: [] };
+        }
+
+        const customers = await database.searchCustomers(search.trim());
+
+        return {
+          success: true,
+          customers,
+        };
+      } catch (error) {
+        console.error("IPC search-customers failed:", error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+    });
   }
 
   setupImageStorage() {

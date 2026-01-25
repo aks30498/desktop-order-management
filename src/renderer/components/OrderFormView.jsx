@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Helpers from "@/utils/helpers";
-
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Command, CommandList, CommandItem } from "@/components/ui/command";
+import { useToast } from "@/hooks/use-toast";
 
 import { X } from "lucide-react";
 
@@ -19,7 +20,9 @@ const initialForm = {
   orderNotes: "",
 };
 
-export default function OrderFormView({ onClose, onOrderCreated }) {
+export default function OrderFormView({ onOrderCreated }) {
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,7 +53,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   }, []);
 
   // --------------------
-  // Debounced customer search
+  // Debounced customer search (real DB)
   // --------------------
   useEffect(() => {
     if (!customerQuery || selectedCustomer) return;
@@ -58,8 +61,17 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
     const timer = setTimeout(async () => {
       try {
         setLoadingSuggestions(true);
-        const results = await fakeSearchCustomers(customerQuery);
-        setCustomerSuggestions(results);
+
+        const result = await Helpers.ipcInvoke(
+          "search-customers",
+          customerQuery,
+        );
+
+        if (result.success) {
+          setCustomerSuggestions(result.customers || []);
+        }
+      } catch (err) {
+        console.error("Customer search failed", err);
       } finally {
         setLoadingSuggestions(false);
       }
@@ -73,6 +85,10 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   // --------------------
   const update = (key, value) => {
     setForm((f) => ({ ...f, [key]: value }));
+  };
+
+  const onClose = () => {
+    navigate("/");
   };
 
   // --------------------
@@ -107,7 +123,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
     setCustomerQuery("");
 
     update("customerName", customer.name);
-    update("phoneNumber", customer.phone);
+    update("phoneNumber", customer.contact);
     update("address", customer.address ?? "");
   };
 
@@ -126,7 +142,10 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   // --------------------
   const handleFile = async (file) => {
     if (!Helpers.validateImage(file)) {
-      notifications.error("Invalid image file");
+      toast({
+        variant: "destructive",
+        title: "Invalid image file",
+      });
       return;
     }
 
@@ -155,7 +174,10 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
         setPreviewUrl(`file://${result.filePath}`);
       }
     } catch {
-      notifications.error("Failed to select image");
+      toast({
+        variant: "destructive",
+        title: "Failed to select image",
+      });
     }
   };
 
@@ -166,12 +188,16 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
   };
 
   // --------------------
-  // Submit
+  // Submit (real DB transaction)
   // --------------------
   const handleSubmit = async () => {
     if (isSubmitting) return;
+
     if (!validate()) {
-      notifications.warning("Fix validation errors");
+      toast({
+        title: "Validation error",
+        description: "Fix validation errors before submitting.",
+      });
       return;
     }
 
@@ -197,32 +223,40 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
         imagePath = result.imagePath;
       }
 
-      if (!selectedCustomer) {
-        const customer = await fakeCreateCustomer({
-          name: form.customerName,
-          phone: form.phoneNumber,
-          address: form.address,
-        });
+      const payload = {
+        customerId: selectedCustomer?.id ?? null,
+        customer: selectedCustomer
+          ? null
+          : {
+              name: form.customerName,
+              contact: form.phoneNumber,
+              address: form.address,
+            },
+        orderDate: form.orderDate,
+        orderTime: form.orderTime,
+        weight: form.weight,
+        imagePath,
+        orderNotes: form.orderNotes,
+      };
 
-        await fakeCreateOrder({
-          customerId: customer.id,
-          ...form,
-          imagePath,
-        });
-      } else {
-        await fakeCreateOrder({
-          customerId: selectedCustomer.id,
-          ...form,
-          imagePath,
-        });
+      const result = await Helpers.ipcInvoke("add-order", payload);
+
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
-      notifications.success("Order added");
+      toast({
+        title: "Order added successfully",
+      });
+
       onOrderCreated?.();
       onClose();
     } catch (err) {
       console.error(err);
-      notifications.error("Failed to add order");
+      toast({
+        variant: "destructive",
+        title: "Failed to add order",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -274,7 +308,7 @@ export default function OrderFormView({ onClose, onOrderCreated }) {
                         >
                           <span>{c.name}</span>
                           <span className="text-xs text-muted-foreground">
-                            {c.phone}
+                            {c.contact}
                           </span>
                         </CommandItem>
                       ))}
@@ -408,37 +442,4 @@ function Field({ label, error, children }) {
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
-}
-
-// --------------------
-// Placeholder APIs
-// --------------------
-async function fakeSearchCustomers(query) {
-  await Helpers.delay(400);
-
-  return [
-    {
-      id: 1,
-      name: "Rahul Sharma",
-      phone: "9876543210",
-      address: "Jaipur",
-    },
-    {
-      id: 2,
-      name: "Amit Verma",
-      phone: "9123456789",
-      address: "Delhi",
-    },
-  ].filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
-}
-
-async function fakeCreateCustomer(payload) {
-  console.log("Creating customer:", payload);
-  await Helpers.delay(500);
-  return { id: Date.now(), ...payload };
-}
-
-async function fakeCreateOrder(payload) {
-  console.log("Creating order:", payload);
-  await Helpers.delay(500);
 }

@@ -82,8 +82,6 @@ class OrderDatabase {
 
       const createIndexes = [
         "CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)",
-        "CREATE INDEX IF NOT EXISTS idx_customer_name ON orders(customer_name)",
-        "CREATE INDEX IF NOT EXISTS idx_phone_number ON orders(phone_number)",
         "CREATE INDEX IF NOT EXISTS idx_status ON orders(status)",
         "CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)",
       ];
@@ -311,7 +309,18 @@ class OrderDatabase {
 
   async getOrderById(id) {
     try {
-      const sql = "SELECT * FROM orders WHERE id = ?";
+      const sql = `
+      SELECT 
+        orders.*,
+        customers.name as customer_name,
+        customers.contact,
+        customers.address,
+        customers.alternate_contact
+      FROM orders
+      JOIN customers ON customers.id = orders.customer_id
+      WHERE orders.id = ?
+    `;
+
       const stmt = this.db.prepare(sql);
       stmt.bind([id]);
 

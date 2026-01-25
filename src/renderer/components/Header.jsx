@@ -19,7 +19,7 @@ export default function Header() {
           variant={
             location.pathname.startsWith("/orders") ? "default" : "ghost"
           }
-          onClick={() => navigate("/orders")}
+          onClick={() => navigate("/")}
         >
           Orders
         </Button>
