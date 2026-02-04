@@ -1,11 +1,13 @@
 import { useState } from "react";
 import Helpers from "@/utils/helpers";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 import { MoreHorizontal } from "lucide-react";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Badge } from "./ui/badge";
@@ -21,8 +23,10 @@ export default function OrderRow({
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // --------------------------------
   const toggleStatus = async () => {
     const newStatus = order.status === "pending" ? "delivered" : "pending";
+
     try {
       setStatusLoading(true);
       await onStatusChange(order.id, newStatus);
@@ -31,8 +35,10 @@ export default function OrderRow({
     }
   };
 
+  // --------------------------------
   const togglePayment = async () => {
     const newStatus = order.payment_status === "pending" ? "done" : "pending";
+
     try {
       setPaymentLoading(true);
       await onPaymentStatusChange(order.id, newStatus);
@@ -41,6 +47,7 @@ export default function OrderRow({
     }
   };
 
+  // --------------------------------
   const handleDelete = async () => {
     try {
       setDeleteLoading(true);
@@ -50,6 +57,7 @@ export default function OrderRow({
     }
   };
 
+  // --------------------------------
   return (
     <TableRow
       className={`${order.deleted ? "opacity-60" : ""} hover:bg-muted/50 transition-colors cursor-pointer`}
@@ -58,7 +66,7 @@ export default function OrderRow({
 
       <TableCell className="font-medium">{order.customer_name}</TableCell>
 
-      <TableCell className="whitespace-nowrap">{order.phone_number}</TableCell>
+      <TableCell className="whitespace-nowrap">{order.contact}</TableCell>
 
       <TableCell className="whitespace-nowrap">
         {Helpers.formatDate(order.order_date)}
@@ -66,8 +74,10 @@ export default function OrderRow({
 
       <TableCell className="whitespace-nowrap">{order.order_time}</TableCell>
 
+      {/* Status */}
       <TableCell>
         <div className="capitalize">{order.status}</div>
+
         {order.status === "delivered" && order.delivered_at && (
           <div className="text-xs text-muted-foreground">
             {Helpers.formatDateTimeDisplay(order.delivered_at)}
@@ -75,7 +85,8 @@ export default function OrderRow({
         )}
       </TableCell>
 
-      <TableCell className="capitalize">
+      {/* Payment */}
+      <TableCell>
         {order.payment_status === "pending" ? (
           <Badge variant="secondary">Pending</Badge>
         ) : (
@@ -85,6 +96,7 @@ export default function OrderRow({
         )}
       </TableCell>
 
+      {/* Image */}
       <TableCell>
         {order.image_path ? (
           <button
@@ -98,6 +110,7 @@ export default function OrderRow({
         )}
       </TableCell>
 
+      {/* Actions */}
       <TableCell className="text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

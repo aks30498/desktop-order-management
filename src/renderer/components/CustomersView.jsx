@@ -5,8 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Command, CommandList, CommandItem } from "@/components/ui/command";
+import { useToast } from "@/hooks/use-toast";
+
+import { Loader2, User, Save, RotateCcw } from "lucide-react";
 
 export default function CustomersView() {
+  const { toast } = useToast();
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -15,9 +20,9 @@ export default function CustomersView() {
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // --------------------
-  // Search customers (debounced)
-  // --------------------
+  // ---------------------------
+  // Search (debounced)
+  // ---------------------------
   useEffect(() => {
     if (!query) {
       setResults([]);
@@ -27,8 +32,11 @@ export default function CustomersView() {
     const timer = setTimeout(async () => {
       try {
         setLoading(true);
-        const result = await Helpers.ipcInvoke("search-customers", query);
-        setResults(result || []);
+
+        const res = await Helpers.ipcInvoke("search-customers", query);
+
+        if (res?.success) setResults(res.customers || []);
+        else setResults([]);
       } finally {
         setLoading(false);
       }
@@ -37,48 +45,63 @@ export default function CustomersView() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  // --------------------
+  // ---------------------------
   // Selection
-  // --------------------
-  const selectCustomer = (customer) => {
+  // ---------------------------
+  function selectCustomer(customer) {
     setSelected(customer);
-    setForm(customer);
+    setForm({ ...customer });
     setResults([]);
     setQuery("");
-  };
+  }
 
-  // --------------------
-  // Editing
-  // --------------------
-  const update = (key, value) => {
+  // ---------------------------
+  // Form helpers
+  // ---------------------------
+  function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
-  };
+  }
 
-  const save = async () => {
+  const hasChanges =
+    selected && JSON.stringify(selected) !== JSON.stringify(form);
+
+  // ---------------------------
+  // Save
+  // ---------------------------
+  async function save() {
     try {
       setSaving(true);
 
-      // TODO: Implement IPC later
-      console.log("Saving customer:", form);
-      await Helpers.delay(500);
+      const res = await Helpers.ipcInvoke("update-customer", form);
 
-      notifications.success("Customer saved");
+      if (!res.success) throw new Error(res.error);
+
+      toast({
+        title: "Customer updated successfully",
+      });
+
       setSelected(form);
-    } catch {
-      notifications.error("Failed to save customer");
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Failed to save customer",
+      });
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  // --------------------
+  // ---------------------------
   // Render
-  // --------------------
+  // ---------------------------
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-5xl">
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-semibold">Customers</h2>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <User size={20} />
+          Customers
+        </h1>
         <p className="text-sm text-muted-foreground">
           Search and manage customer records
         </p>
@@ -93,15 +116,13 @@ export default function CustomersView() {
         <CardContent>
           <div className="relative max-w-md">
             <Input
-              placeholder="Search by name or contact..."
+              placeholder="Search name or contact..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
 
             {loading && (
-              <div className="absolute right-3 top-2 text-xs text-muted-foreground">
-                Searching...
-              </div>
+              <Loader2 className="absolute right-3 top-2 h-4 w-4 animate-spin text-muted-foreground" />
             )}
 
             {results.length > 0 && (
@@ -132,10 +153,15 @@ export default function CustomersView() {
       {form && (
         <Card>
           <CardHeader>
-            <CardTitle>Customer Details</CardTitle>
+            <CardTitle>
+              Customer Details
+              <span className="ml-2 text-xs text-muted-foreground">
+                ID #{form.id}
+              </span>
+            </CardTitle>
           </CardHeader>
 
-          <CardContent className="space-y-4 max-w-xl">
+          <CardContent className="grid gap-4 max-w-xl">
             <Field label="Name">
               <Input
                 value={form.name}
@@ -165,22 +191,38 @@ export default function CustomersView() {
             </Field>
 
             <div className="flex gap-3 pt-2">
-              <Button onClick={save} disabled={saving}>
-                {saving ? "Saving..." : "Save"}
+              <Button
+                onClick={save}
+                disabled={saving || !hasChanges}
+                className="gap-2"
+              >
+                {saving && <Loader2 size={14} className="animate-spin" />}
+                <Save size={14} />
+                Save
               </Button>
 
-              <Button variant="secondary" onClick={() => setForm(selected)}>
+              <Button
+                variant="secondary"
+                onClick={() => setForm(selected)}
+                className="gap-2"
+              >
+                <RotateCcw size={14} />
                 Reset
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {!form && (
+        <div className="text-sm text-muted-foreground">
+          Search and select a customer to view details.
+        </div>
+      )}
     </div>
   );
 }
 
-// --------------------
 function Field({ label, children }) {
   return (
     <div className="space-y-1">

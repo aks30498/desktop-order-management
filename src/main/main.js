@@ -322,14 +322,10 @@ class OrderManagementApp {
       }
     });
 
-    ipcMain.handle("get-orders", async (event, filter) => {
-      try {
-        const orders = await database.getOrders(filter);
-        return { success: true, orders };
-      } catch (error) {
-        console.error("Error fetching orders:", error);
-        return { success: false, error: error.message };
-      }
+    ipcMain.handle("get-orders", async (_, filter) => {
+      const ordersResponse = await database.getOrders(filter);
+
+      return ordersResponse;
     });
 
     ipcMain.handle("get-order-by-id", async (event, id) => {
@@ -538,6 +534,19 @@ class OrderManagementApp {
           error: error.message,
         };
       }
+    });
+
+    ipcMain.handle("update-customer", async (_, payload) => {
+      try {
+        await database.updateCustomer(payload);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    ipcMain.handle("get-stats", async () => {
+      return await database.getStats();
     });
   }
 

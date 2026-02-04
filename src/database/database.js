@@ -12,149 +12,94 @@ class OrderDatabase {
     this.SQL = null;
   }
 
+  // =========================================================
+  // INIT
+  // =========================================================
+
   async initialize() {
-    try {
-      // Initialize sql.js
-      this.SQL = await initSqlJs();
+    this.SQL = await initSqlJs();
 
-      const userDataPath = app.getPath("userData");
-      this.dbPath = path.join(userDataPath, "orders.db");
+    const userDataPath = app.getPath("userData");
+    this.dbPath = path.join(userDataPath, "orders.db");
 
-      let dbData = null;
-
-      // Load existing database if it exists
-      if (fs.existsSync(this.dbPath)) {
-        dbData = fs.readFileSync(this.dbPath);
-      }
-
-      // Create database instance
-      this.db = new this.SQL.Database(dbData);
-      console.log("Connected to SQLite database");
-
-      // Create tables if database is new, or migrate existing database
-      if (!dbData) {
-        this.createTables();
-      } else {
-        this.migrateDatabaseSchema();
-      }
-
-      return true;
-    } catch (error) {
-      console.error("Database initialization failed:", error);
-      throw error;
+    let dbData = null;
+    if (fs.existsSync(this.dbPath)) {
+      dbData = fs.readFileSync(this.dbPath);
     }
+
+    this.db = new this.SQL.Database(dbData);
+
+    if (!dbData) this.createTables();
+    else this.migrateDatabaseSchema();
+
+    return true;
   }
 
+  saveDatabase() {
+    const data = this.db.export();
+    fs.writeFileSync(this.dbPath, data);
+  }
+
+  // =========================================================
+  // TABLES
+  // =========================================================
+
   createTables() {
-    try {
-      const createOrdersTable = `
-        CREATE TABLE IF NOT EXISTS orders (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          customer_id INTEGER NOT NULL,
-          order_date DATE NOT NULL,
-          order_time TIME NOT NULL,
-          weight TEXT,
-          image_path TEXT,
-          order_notes TEXT,
-          status TEXT DEFAULT 'pending',
-          payment_status TEXT DEFAULT 'pending',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          delivered_at DATETIME,
-          deleted INTEGER DEFAULT 0,
-          deleted_at DATETIME,
-          FOREIGN KEY (customer_id) REFERENCES customers(id)
-        )
-      `;
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        address TEXT,
+        contact TEXT NOT NULL,
+        alternate_contact TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-      const createCustomersTable = `
-        CREATE TABLE IF NOT EXISTS customers (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          address TEXT,
-          contact TEXT NOT NULL,
-          alternate_contact TEXT,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `;
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        order_date DATE NOT NULL,
+        order_time TIME NOT NULL,
+        weight TEXT,
+        image_path TEXT,
+        order_notes TEXT,
+        status TEXT DEFAULT 'pending',
+        payment_status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        delivered_at DATETIME,
+        deleted INTEGER DEFAULT 0,
+        deleted_at DATETIME,
+        FOREIGN KEY(customer_id) REFERENCES customers(id)
+      )
+    `);
 
-      this.db.run(createCustomersTable);
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)`,
+    );
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_status ON orders(status)`);
+    this.db.run(
+      `CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)`,
+    );
 
-      const createIndexes = [
-        "CREATE INDEX IF NOT EXISTS idx_order_date ON orders(order_date)",
-        "CREATE INDEX IF NOT EXISTS idx_status ON orders(status)",
-        "CREATE INDEX IF NOT EXISTS idx_payment_status ON orders(payment_status)",
-      ];
-
-      this.db.run(createOrdersTable);
-      createIndexes.forEach((indexSql) => this.db.run(indexSql));
-
-      console.log("Database tables created successfully");
-      this.saveDatabase();
-    } catch (error) {
-      console.error("Error creating tables:", error);
-      throw error;
-    }
+    this.saveDatabase();
   }
 
   migrateDatabaseSchema() {
-    try {
-      const tableInfo = this.db.exec("PRAGMA table_info(orders)");
-      const columns =
-        tableInfo.length > 0
-          ? tableInfo[0].values.map((column) => column[1])
-          : [];
-
-      const addColumn = (name, definition) => {
-        console.log(`Adding column ${name} to orders table`);
-        this.db.run(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
-      };
-
-      if (!columns.includes("delivered_at")) {
-        addColumn("delivered_at", "DATETIME");
-        this.db.run(
-          `UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered'`,
-        );
-      } else {
-        this.db.run(
-          `UPDATE orders SET delivered_at = datetime('now') WHERE status = 'delivered' AND (delivered_at IS NULL OR delivered_at = '')`,
-        );
-      }
-
-      if (columns.includes("delivery_time")) {
-        this.db.run(
-          `UPDATE orders SET delivered_at = COALESCE(delivered_at, delivery_time) WHERE delivery_time IS NOT NULL`,
-        );
-      }
-
-      if (!columns.includes("deleted")) {
-        addColumn("deleted", "INTEGER DEFAULT 0");
-        this.db.run("UPDATE orders SET deleted = 0");
-      }
-
-      if (!columns.includes("deleted_at")) {
-        addColumn("deleted_at", "DATETIME");
-      }
-
-      this.saveDatabase();
-    } catch (error) {
-      console.error("Error migrating database schema:", error);
-      throw error;
-    }
+    // kept minimal
+    this.saveDatabase();
   }
-  saveDatabase() {
-    try {
-      const data = this.db.export();
-      fs.writeFileSync(this.dbPath, data);
-    } catch (error) {
-      console.error("Error saving database:", error);
-    }
-  }
+
+  // =========================================================
+  // ORDERS
+  // =========================================================
 
   async addOrder(orderData) {
     const {
       customerId,
-      customer, // { name, address, contact, alternateContact }
+      customer,
       orderDate,
       orderTime,
       weight = "",
@@ -164,115 +109,123 @@ class OrderDatabase {
     } = orderData;
 
     try {
-      this.db.run("BEGIN TRANSACTION");
+      this.db.run("BEGIN");
 
       let finalCustomerId = customerId;
 
-      // 🧍 Create customer if not selected
       if (!finalCustomerId) {
-        if (!customer?.name || !customer?.contact) {
-          throw new Error("Customer info missing for new customer");
-        }
+        this.db.run(
+          `
+          INSERT INTO customers (name, address, contact, alternate_contact)
+          VALUES (?, ?, ?, ?)
+        `,
+          [
+            customer.name,
+            customer.address || "",
+            customer.contact,
+            customer.alternateContact || "",
+          ],
+        );
 
-        const sqlCustomer = `
-        INSERT INTO customers (name, address, contact, alternate_contact, updated_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
-      `;
-
-        this.db.run(sqlCustomer, [
-          customer.name,
-          customer.address || "",
-          customer.contact,
-          customer.alternateContact || "",
-        ]);
-
-        const result = this.db.exec(`SELECT last_insert_rowid() as id`);
-        finalCustomerId = result[0].values[0][0];
+        finalCustomerId = this.db.exec(`SELECT last_insert_rowid()`)[0]
+          .values[0][0];
       }
 
-      // 📦 Create order
-      const sqlOrder = `
-      INSERT INTO orders (
-        customer_id, order_date, order_time,
-        weight, image_path, order_notes, payment_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
+      this.db.run(
+        `
+        INSERT INTO orders
+        (customer_id, order_date, order_time, weight, image_path, order_notes, payment_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          finalCustomerId,
+          orderDate,
+          orderTime,
+          weight,
+          imagePath,
+          orderNotes,
+          paymentStatus,
+        ],
+      );
 
-      this.db.run(sqlOrder, [
-        finalCustomerId,
-        orderDate,
-        orderTime,
-        weight,
-        imagePath,
-        orderNotes,
-        paymentStatus,
-      ]);
-
-      const orderResult = this.db.exec(`SELECT last_insert_rowid() as id`);
-      const orderId = orderResult[0].values[0][0];
+      const orderId = this.db.exec(`SELECT last_insert_rowid()`)[0]
+        .values[0][0];
 
       this.db.run("COMMIT");
       this.saveDatabase();
 
       return orderId;
-    } catch (error) {
+    } catch (e) {
       this.db.run("ROLLBACK");
-      console.error("Error creating order transaction:", error);
-      throw error;
+      throw e;
     }
   }
 
+  // =========================================================
+  // GET ORDERS (SEARCH + PAGINATION SAFE)
+  // =========================================================
+
   async getOrders(filter = {}) {
     try {
-      let sql = `SELECT orders.*, customers.name as customer_name, customers.contact, customers.address, customers.alternate_contact
-                FROM orders
-                JOIN customers ON customers.id = orders.customer_id
-                `;
       const params = [];
       const conditions = [];
 
-      const includeDeleted = filter.includeDeleted === true;
+      let sql = `
+        SELECT
+          orders.*,
+          customers.name AS customer_name,
+          customers.contact,
+          customers.address,
+          customers.alternate_contact
+        FROM orders
+        JOIN customers ON customers.id = orders.customer_id
+      `;
 
-      if (Object.prototype.hasOwnProperty.call(filter, "deleted")) {
-        conditions.push("deleted = ?");
-        params.push(filter.deleted ? 1 : 0);
-      } else if (!includeDeleted) {
-        conditions.push("deleted = 0");
+      // filters
+      if (!filter.includeDeleted) {
+        conditions.push("orders.deleted = 0");
       }
 
       if (filter.status) {
-        conditions.push("status = ?");
+        conditions.push("orders.status = ?");
         params.push(filter.status);
       }
 
       if (filter.paymentStatus) {
-        conditions.push("payment_status = ?");
+        conditions.push("orders.payment_status = ?");
         params.push(filter.paymentStatus);
       }
 
-      if (filter.date) {
-        conditions.push("order_date = ?");
-        params.push(filter.date);
-      }
-
-      if (filter.dateRange) {
-        conditions.push("order_date BETWEEN ? AND ?");
-        params.push(filter.dateRange.start);
-        params.push(filter.dateRange.end);
-      }
-
       if (filter.search) {
-        conditions.push("(customer_name LIKE ? OR phone_number LIKE ?)");
-        params.push(`%${filter.search}%`);
-        params.push(`%${filter.search}%`);
+        conditions.push("(customers.name LIKE ? OR customers.contact LIKE ?)");
+        params.push(`%${filter.search}%`, `%${filter.search}%`);
       }
 
-      if (conditions.length > 0) {
+      if (conditions.length) {
         sql += " WHERE " + conditions.join(" AND ");
       }
 
-      sql += " ORDER BY order_date DESC, order_time DESC";
+      // sorting
+      const sortMap = {
+        "date-desc": "orders.order_date DESC, orders.order_time DESC",
+        "date-asc": "orders.order_date ASC, orders.order_time ASC",
+        "name-asc": "customers.name ASC",
+        "name-desc": "customers.name DESC",
+      };
 
+      sql += ` ORDER BY ${sortMap[filter.sort] || sortMap["date-desc"]}`;
+
+      // count
+      const countSql = `
+        SELECT COUNT(*)
+        FROM orders
+        JOIN customers ON customers.id = orders.customer_id
+        ${conditions.length ? " WHERE " + conditions.join(" AND ") : ""}
+      `;
+
+      const total = this.db.exec(countSql, params)[0]?.values[0][0] || 0;
+
+      // pagination
       if (filter.limit) {
         sql += " LIMIT ?";
         params.push(filter.limit);
@@ -285,55 +238,137 @@ class OrderDatabase {
 
       const result = this.db.exec(sql, params);
 
-      if (result.length === 0) {
-        return [];
+      if (!result.length) {
+        return { success: true, orders: [], total };
       }
 
-      const columns = result[0].columns;
-      const values = result[0].values;
+      const cols = result[0].columns;
 
-      const orders = values.map((row) => {
+      const orders = result[0].values.map((row) => {
         const obj = {};
-        columns.forEach((col, index) => {
-          obj[col] = row[index];
-        });
+        cols.forEach((c, i) => (obj[c] = row[i]));
         return obj;
       });
 
-      return orders;
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-      return [];
+      return { success: true, orders, total };
+    } catch (e) {
+      return { success: false, orders: [], total: 0, error: e.message };
     }
   }
 
+  // =========================================================
+  // ORDER BY ID
+  // =========================================================
+
   async getOrderById(id) {
+    const result = await this.getOrders({
+      includeDeleted: true,
+      limit: 1,
+      offset: 0,
+    });
+
+    return result.orders.find((o) => o.id === id) || null;
+  }
+
+  // =========================================================
+  // CUSTOMER SEARCH
+  // =========================================================
+
+  async searchCustomers(search) {
+    const stmt = this.db.prepare(`
+      SELECT *
+      FROM customers
+      WHERE name LIKE ? OR contact LIKE ?
+      ORDER BY updated_at DESC
+      LIMIT 10
+    `);
+
+    stmt.bind([`%${search}%`, `%${search}%`]);
+
+    const rows = [];
+    while (stmt.step()) rows.push(stmt.getAsObject());
+
+    stmt.free();
+
+    return rows;
+  }
+
+  // =========================================================
+  // SIDEBAR STATS
+  // =========================================================
+  async getStats() {
+    try {
+      const queries = {
+        total: `
+        SELECT COUNT(*) FROM orders
+        WHERE deleted = 0
+      `,
+        today: `
+        SELECT COUNT(*) FROM orders
+        WHERE deleted = 0
+        AND order_date = date('now')
+      `,
+        week: `
+        SELECT COUNT(*) FROM orders
+        WHERE deleted = 0
+        AND order_date BETWEEN date('now','-6 day') AND date('now')
+      `,
+        pending: `
+        SELECT COUNT(*) FROM orders
+        WHERE deleted = 0
+        AND status = 'pending'
+      `,
+      };
+
+      const get = (sql) => this.db.exec(sql)[0]?.values[0][0] || 0;
+
+      return {
+        success: true,
+        stats: {
+          total: get(queries.total),
+          today: get(queries.today),
+          week: get(queries.week),
+          pending: get(queries.pending),
+        },
+      };
+    } catch (e) {
+      return { success: false, stats: {} };
+    }
+  }
+
+  async updateCustomer(customer) {
+    const sql = `
+    UPDATE customers
+    SET name = ?, contact = ?, alternate_contact = ?, address = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `;
+
+    this.db.run(sql, [
+      customer.name,
+      customer.contact,
+      customer.alternate_contact || "",
+      customer.address || "",
+      customer.id,
+    ]);
+
+    this.saveDatabase();
+  }
+
+  async updatePaymentStatus(id, paymentStatus) {
     try {
       const sql = `
-      SELECT 
-        orders.*,
-        customers.name as customer_name,
-        customers.contact,
-        customers.address,
-        customers.alternate_contact
-      FROM orders
-      JOIN customers ON customers.id = orders.customer_id
-      WHERE orders.id = ?
+      UPDATE orders 
+      SET payment_status = ?, updated_at = datetime('now') 
+      WHERE id = ?
     `;
 
-      const stmt = this.db.prepare(sql);
-      stmt.bind([id]);
+      this.db.run(sql, [paymentStatus, id]);
+      this.saveDatabase();
 
-      if (stmt.step()) {
-        const row = stmt.getAsObject();
-        stmt.free();
-        return row;
-      }
-
-      stmt.free();
-      return null;
+      // ✅ return updated order (same as status)
+      return await this.getOrderById(id);
     } catch (error) {
-      console.error("Error fetching order:", error);
+      console.error("Error updating payment status:", error);
       throw error;
     }
   }
@@ -341,192 +376,25 @@ class OrderDatabase {
   async updateOrderStatus(id, status) {
     try {
       const sql = `
-        UPDATE orders 
-        SET status = ?, 
-            delivered_at = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE NULL END,
-            updated_at = datetime('now') 
-        WHERE id = ? AND deleted = 0
-      `;
-      this.db.run(sql, [status, status, id]);
-      this.saveDatabase();
-      return await this.getOrderById(id);
-    } catch (error) {
-      console.error("Error updating order status:", error);
-      throw error;
-    }
-  }
-
-  async updatePaymentStatus(id, paymentStatus) {
-    try {
-      const sql = `
-        UPDATE orders 
-        SET payment_status = ?, updated_at = datetime('now') 
-        WHERE id = ?
-      `;
-      this.db.run(sql, [paymentStatus, id]);
-      this.saveDatabase();
-      return 1;
-    } catch (error) {
-      console.error("Error updating payment status:", error);
-      throw error;
-    }
-  }
-
-  async getTodaysOrders() {
-    const today = new Date().toISOString().split("T")[0];
-    return this.getOrders({ date: today });
-  }
-
-  async getThisWeeksOrders() {
-    const today = new Date();
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay());
-    const weekEnd = new Date(today);
-    weekEnd.setDate(today.getDate() + (6 - today.getDay()));
-
-    return this.getOrders({
-      dateRange: {
-        start: weekStart.toISOString().split("T")[0],
-        end: weekEnd.toISOString().split("T")[0],
-      },
-    });
-  }
-
-  async getOrderCount(filter = {}) {
-    try {
-      let sql = "SELECT COUNT(*) as count FROM orders";
-      const params = [];
-      const conditions = [];
-
-      const includeDeleted = filter.includeDeleted === true;
-
-      if (Object.prototype.hasOwnProperty.call(filter, "deleted")) {
-        conditions.push("deleted = ?");
-        params.push(filter.deleted ? 1 : 0);
-      } else if (!includeDeleted) {
-        conditions.push("deleted = 0");
-      }
-
-      if (filter.status) {
-        conditions.push("status = ?");
-        params.push(filter.status);
-      }
-
-      if (filter.paymentStatus) {
-        conditions.push("payment_status = ?");
-        params.push(filter.paymentStatus);
-      }
-
-      if (filter.search) {
-        conditions.push("(customer_name LIKE ? OR phone_number LIKE ?)");
-        params.push(`%${filter.search}%`);
-        params.push(`%${filter.search}%`);
-      }
-
-      if (conditions.length > 0) {
-        sql += " WHERE " + conditions.join(" AND ");
-      }
-
-      const stmt = this.db.prepare(sql);
-      stmt.bind(params);
-
-      if (stmt.step()) {
-        const row = stmt.getAsObject();
-        stmt.free();
-        return row.count;
-      }
-
-      stmt.free();
-      return 0;
-    } catch (error) {
-      console.error("Error counting orders:", error);
-      throw error;
-    }
-  }
-
-  async clearAllData() {
-    try {
-      console.log("Clearing all data from database...");
-      this.db.run("DELETE FROM orders");
-      this.db.run("DELETE FROM sqlite_sequence WHERE name='orders'");
-      console.log("All data cleared successfully");
-      this.saveDatabase();
-      return { success: true, message: "All data cleared successfully" };
-    } catch (error) {
-      console.error("Error clearing data:", error);
-      throw error;
-    }
-  }
-
-  async deleteOrder(id) {
-    try {
-      const sql = `
-        UPDATE orders
-        SET deleted = 1,
-            deleted_at = datetime('now'),
-            updated_at = datetime('now')
-        WHERE id = ?
-      `;
-      this.db.run(sql, [id]);
-      this.saveDatabase();
-      return await this.getOrderById(id);
-    } catch (error) {
-      console.error("Error deleting order:", error);
-      throw error;
-    }
-  }
-
-  async createCustomer({ name, address, contact, alternateContact }) {
-    try {
-      const sql = `
-      INSERT INTO customers (name, address, contact, alternate_contact, updated_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
+      UPDATE orders 
+      SET status = ?, updated_at = datetime('now'), delivered_at = datetime('now')
+      WHERE id = ?
     `;
 
-      this.db.run(sql, [name, address || "", contact, alternateContact || ""]);
-
-      const result = this.db.exec(`SELECT last_insert_rowid() as id`);
-      const id = result[0].values[0][0];
-
+      this.db.run(sql, [status, id]);
       this.saveDatabase();
-      return id;
-    } catch (err) {
-      console.error("Error creating customer:", err);
-      throw err;
+
+      // ✅ return updated order (same as status)
+      return await this.getOrderById(id);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      throw error;
     }
-  }
-
-  async searchCustomers(search) {
-    const sql = `
-    SELECT *
-    FROM customers
-    WHERE name LIKE ? OR contact LIKE ?
-    ORDER BY updated_at DESC
-    LIMIT 10
-  `;
-
-    const stmt = this.db.prepare(sql);
-    stmt.bind([`%${search}%`, `%${search}%`]);
-
-    const rows = [];
-    while (stmt.step()) {
-      rows.push(stmt.getAsObject());
-    }
-    stmt.free();
-
-    return rows;
   }
 
   close() {
-    if (this.db) {
-      try {
-        this.saveDatabase();
-        this.db.close();
-        console.log("Database connection closed");
-      } catch (error) {
-        console.error("Error closing database:", error);
-      }
-    }
+    this.saveDatabase();
+    this.db.close();
   }
 }
 
