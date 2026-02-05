@@ -8,5 +8,11 @@
       "@/*": ["src/renderer/*"]
     }
   },
-  "include": ["src/**/*", "electron/main.js"]
+  "include": [
+    "src/**/*",
+    "electron/main.js",
+    "electron/database",
+    "electron/services",
+    "electron/preload.js"
+  ]
 }

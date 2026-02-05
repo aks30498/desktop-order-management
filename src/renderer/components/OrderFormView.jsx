@@ -6,9 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Command, CommandList, CommandItem } from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 
 const initialForm = {
   customerName: "",
@@ -40,6 +45,7 @@ export default function OrderFormView({ onOrderCreated }) {
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
   // --------------------
   // Initialize date + time
@@ -53,29 +59,31 @@ export default function OrderFormView({ onOrderCreated }) {
   }, []);
 
   // --------------------
-  // Debounced customer search (real DB)
+  // Debounced customer search
   // --------------------
   useEffect(() => {
-    if (!customerQuery || selectedCustomer) return;
+    if (!customerQuery.trim() || selectedCustomer) {
+      setCustomerSuggestions([]);
+      setIsPopoverOpen(false);
+      return;
+    }
 
     const timer = setTimeout(async () => {
       try {
         setLoadingSuggestions(true);
-
         const result = await Helpers.ipcInvoke(
           "search-customers",
           customerQuery,
         );
-
-        if (result.success) {
-          setCustomerSuggestions(result.customers || []);
-        }
+        const suggestions = result || [];
+        setCustomerSuggestions(suggestions);
+        setIsPopoverOpen(suggestions.length > 0);
       } catch (err) {
         console.error("Customer search failed", err);
       } finally {
         setLoadingSuggestions(false);
       }
-    }, 1500);
+    }, 400); // Reduced delay for better UX
 
     return () => clearTimeout(timer);
   }, [customerQuery, selectedCustomer]);
@@ -92,35 +100,13 @@ export default function OrderFormView({ onOrderCreated }) {
   };
 
   // --------------------
-  // Validation
-  // --------------------
-  const validate = () => {
-    const next = {};
-
-    if (!Helpers.validateRequired(form.customerName)) {
-      next.customerName = "Customer name is required";
-    }
-
-    if (!Helpers.validateRequired(form.phoneNumber)) {
-      next.phoneNumber = "Phone number is required";
-    } else if (!Helpers.validatePhone(form.phoneNumber)) {
-      next.phoneNumber = "Invalid phone number";
-    }
-
-    if (!form.orderDate) next.orderDate = "Order date is required";
-    if (!form.orderTime) next.orderTime = "Order time is required";
-
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
-  // --------------------
   // Customer selection
   // --------------------
   const handleCustomerSelect = (customer) => {
     setSelectedCustomer(customer);
     setCustomerSuggestions([]);
     setCustomerQuery("");
+    setIsPopoverOpen(false);
 
     update("customerName", customer.name);
     update("phoneNumber", customer.contact);
@@ -131,6 +117,7 @@ export default function OrderFormView({ onOrderCreated }) {
     setSelectedCustomer(null);
     setCustomerSuggestions([]);
     setCustomerQuery("");
+    setIsPopoverOpen(false);
 
     update("customerName", "");
     update("phoneNumber", "");
@@ -142,16 +129,11 @@ export default function OrderFormView({ onOrderCreated }) {
   // --------------------
   const handleFile = async (file) => {
     if (!Helpers.validateImage(file)) {
-      toast({
-        variant: "destructive",
-        title: "Invalid image file",
-      });
+      toast({ variant: "destructive", title: "Invalid image file" });
       return;
     }
-
     const resized = await Helpers.resizeImage(file);
     const dataUrl = await Helpers.blobToBase64(resized);
-
     setSelectedImage(resized);
     setSelectedImagePath(null);
     setPreviewUrl(dataUrl);
@@ -174,10 +156,7 @@ export default function OrderFormView({ onOrderCreated }) {
         setPreviewUrl(`file://${result.filePath}`);
       }
     } catch {
-      toast({
-        variant: "destructive",
-        title: "Failed to select image",
-      });
+      toast({ variant: "destructive", title: "Failed to select image" });
     }
   };
 
@@ -188,38 +167,33 @@ export default function OrderFormView({ onOrderCreated }) {
   };
 
   // --------------------
-  // Submit (real DB transaction)
+  // Submit logic (Validation + IPC)
   // --------------------
   const handleSubmit = async () => {
     if (isSubmitting) return;
 
-    if (!validate()) {
-      toast({
-        title: "Validation error",
-        description: "Fix validation errors before submitting.",
-      });
-      return;
-    }
+    // Basic Validation
+    const next = {};
+    if (!form.customerName) next.customerName = "Required";
+    if (!form.phoneNumber) next.phoneNumber = "Required";
+    if (!form.orderDate) next.orderDate = "Required";
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
 
     try {
       setIsSubmitting(true);
-
       let imagePath = null;
 
       if (selectedImage) {
         const data = await Helpers.blobToBase64(selectedImage);
         const result = await Helpers.ipcInvoke("save-image", data, null);
-        if (!result.success) throw new Error(result.error);
         imagePath = result.imagePath;
-      }
-
-      if (selectedImagePath) {
+      } else if (selectedImagePath) {
         const result = await Helpers.ipcInvoke(
           "save-image",
           selectedImagePath,
           null,
         );
-        if (!result.success) throw new Error(result.error);
         imagePath = result.imagePath;
       }
 
@@ -240,31 +214,18 @@ export default function OrderFormView({ onOrderCreated }) {
       };
 
       const result = await Helpers.ipcInvoke("add-order", payload);
+      if (!result.success) throw new Error(result.error);
 
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-
-      toast({
-        title: "Order added successfully",
-      });
-
+      toast({ title: "Order added successfully" });
       onOrderCreated?.();
       onClose();
     } catch (err) {
-      console.error(err);
-      toast({
-        variant: "destructive",
-        title: "Failed to add order",
-      });
+      toast({ variant: "destructive", title: "Failed to add order" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --------------------
-  // Render
-  // --------------------
   return (
     <div className="flex justify-center p-6">
       <Card className="w-full max-w-4xl">
@@ -273,56 +234,63 @@ export default function OrderFormView({ onOrderCreated }) {
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Customer Name */}
+          {/* Customer Name Search */}
           <Field label="Customer Name *" error={errors.customerName}>
-            <div className="relative">
-              <Input
-                value={form.customerName}
-                placeholder="Start typing customer name..."
-                disabled={!!selectedCustomer}
-                onChange={(e) => {
-                  update("customerName", e.target.value);
-                  setCustomerQuery(e.target.value);
-                }}
-              />
+            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+              <PopoverTrigger asChild>
+                <div className="relative">
+                  <Input
+                    value={form.customerName}
+                    placeholder="Start typing customer name..."
+                    disabled={!!selectedCustomer}
+                    onChange={(e) => {
+                      update("customerName", e.target.value);
+                      setCustomerQuery(e.target.value);
+                    }}
+                    onFocus={() =>
+                      customerSuggestions.length > 0 && setIsPopoverOpen(true)
+                    }
+                  />
 
-              {selectedCustomer && (
-                <button
-                  type="button"
-                  onClick={clearSelectedCustomer}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X size={16} />
-                </button>
-              )}
+                  {selectedCustomer && (
+                    <button
+                      type="button"
+                      onClick={clearSelectedCustomer}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
 
-              {!selectedCustomer && customerSuggestions.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow">
-                  <Command>
-                    <CommandList>
-                      {customerSuggestions.map((c) => (
-                        <CommandItem
-                          key={c.id}
-                          onSelect={() => handleCustomerSelect(c)}
-                          className="flex justify-between"
-                        >
-                          <span>{c.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {c.contact}
-                          </span>
-                        </CommandItem>
-                      ))}
-                    </CommandList>
-                  </Command>
+                  {loadingSuggestions && (
+                    <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
                 </div>
-              )}
+              </PopoverTrigger>
 
-              {loadingSuggestions && (
-                <div className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  Searching...
-                </div>
-              )}
-            </div>
+              <PopoverContent
+                className="p-0 w-[400px]"
+                align="start"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
+                <Command>
+                  <CommandList>
+                    {customerSuggestions.map((c) => (
+                      <CommandItem
+                        key={c.id}
+                        onSelect={() => handleCustomerSelect(c)}
+                        className="flex justify-between"
+                      >
+                        <span>{c.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {c.contact}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </Field>
 
           {/* Phone + Address */}
@@ -373,33 +341,31 @@ export default function OrderFormView({ onOrderCreated }) {
             />
           </Field>
 
-          {/* Image */}
+          {/* Image Upload Area */}
           <div
-            className="rounded-md border border-dashed p-4 text-center"
+            className="rounded-md border border-dashed p-4 text-center cursor-pointer hover:bg-accent/50 transition-colors"
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
+            onClick={() => !previewUrl && selectFromSystem()}
           >
-            {!previewUrl && (
-              <>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Drag image or select
-                </p>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={selectFromSystem}
-                >
-                  Select Image
-                </Button>
-              </>
-            )}
-
-            {previewUrl && (
+            {!previewUrl ? (
+              <p className="text-sm text-muted-foreground">
+                Drag image here or click to select
+              </p>
+            ) : (
               <div className="relative inline-block">
-                <img src={previewUrl} className="max-h-40 rounded" />
+                <img
+                  src={previewUrl}
+                  className="max-h-40 rounded"
+                  alt="Preview"
+                />
                 <button
-                  onClick={removeImage}
-                  className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-white"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeImage();
+                  }}
+                  className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-white shadow-sm"
                 >
                   <X size={14} />
                 </button>
@@ -409,11 +375,13 @@ export default function OrderFormView({ onOrderCreated }) {
 
           {/* Actions */}
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" onClick={onClose} type="button">
               Cancel
             </Button>
-
             <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {isSubmitting ? "Adding..." : "Add Order"}
             </Button>
           </div>
@@ -425,15 +393,12 @@ export default function OrderFormView({ onOrderCreated }) {
         type="file"
         hidden
         accept="image/*"
-        onChange={(e) => handleFile(e.target.files[0])}
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
       />
     </div>
   );
 }
 
-// --------------------
-// Field wrapper
-// --------------------
 function Field({ label, error, children }) {
   return (
     <div className="space-y-1">
