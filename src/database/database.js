@@ -161,6 +161,27 @@ class OrderDatabase {
     }
   }
 
+  async deleteOrder(id) {
+    try {
+      const sql = `
+      UPDATE orders
+      SET deleted = 1,
+          deleted_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `;
+
+      this.db.run(sql, [id]);
+      this.saveDatabase();
+
+      // return updated row (keeps UI consistent like other updates)
+      return await this.getOrderById(id);
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      throw error;
+    }
+  }
+
   // =========================================================
   // GET ORDERS (SEARCH + PAGINATION SAFE)
   // =========================================================
