@@ -105,8 +105,6 @@ class OrderManagementApp {
       this.mainWindow.loadFile(
         path.join(__dirname, "../dist-renderer/index.html"),
       );
-
-      this.mainWindow.webContents.openDevTools();
     }
 
     this.mainWindow.once("ready-to-show", () => {
