@@ -2,13 +2,14 @@
   "name": "desktop-order-management",
   "version": "0.0.2",
   "description": "A lightweight desktop application for managing customer orders",
-  "main": "src/main/main.js",
+  "main": "electron/main.js",
   "scripts": {
     "dev:ui": "vite",
     "dev:electron": "electron . --dev",
     "dev": "concurrently \"npm run dev:ui\" \"npm run dev:electron\"",
     "build:ui": "vite build",
-    "build": "npm run build:ui && electron-builder"
+    "build": "npm run build:ui && electron-builder",
+    "release": "npm run build:ui && rimraf dist && electron-builder -p always"
   },
   "keywords": [
     "electron",
@@ -65,8 +66,9 @@
       "output": "dist"
     },
     "files": [
-      "src/**/*",
-      "node_modules/**/*"
+      "dist-renderer/**/*",
+      "electron/**/*",
+      "package.json"
     ],
     "win": {
       "target": "nsis",

@@ -8,5 +8,5 @@
       "@/*": ["src/renderer/*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "electron/main.js"]
 }
