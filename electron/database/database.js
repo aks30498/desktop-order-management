@@ -18,9 +18,10 @@ class OrderDatabase {
 
   async initialize() {
     this.SQL = await initSqlJs();
-
+    const isDev = !app.isPackaged;
     const userDataPath = app.getPath("userData");
-    this.dbPath = path.join(userDataPath, "orders.db");
+    const dbName = isDev ? "orders-dev.db" : "orders.db";
+    this.dbPath = path.join(userDataPath, dbName);
 
     let dbData = null;
     if (fs.existsSync(this.dbPath)) {
