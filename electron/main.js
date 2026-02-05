@@ -13,8 +13,8 @@ const url = require("url");
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
 
-const database = require("../database/database");
-const printService = require("../services/print-service");
+const database = require("../src/database/database");
+const printService = require("../src/services/print-service");
 
 // Configure autoUpdater logging
 autoUpdater.logger = log;
@@ -83,7 +83,7 @@ class OrderManagementApp {
       this.mainWindow.loadURL("http://localhost:5173");
     } else {
       this.mainWindow.loadFile(
-        path.join(__dirname, "../../dist-renderer/index.html"),
+        path.join(__dirname, "../dist-renderer/index.html"),
       );
     }
 
