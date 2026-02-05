@@ -1,4 +1,4 @@
-import { BrowserRouter } from "react-router-dom";
+import { HashRouter } from "react-router-dom";
 import { useEffect } from "react";
 
 import Router from "./Router";
@@ -59,11 +59,11 @@ export default function App() {
   }, [toast]);
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Router />
 
       {/* MUST be mounted once globally */}
       <Toaster />
-    </BrowserRouter>
+    </HashRouter>
   );
 }
