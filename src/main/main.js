@@ -19,6 +19,7 @@ const printService = require("../services/print-service");
 // Configure autoUpdater logging
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = "info";
+autoUpdater.autoDownload = true;
 
 class OrderManagementApp {
   constructor() {
@@ -32,7 +33,7 @@ class OrderManagementApp {
     await app.whenReady();
     try {
       await database.initialize();
-      this.setupAutoUpdater();
+      this.setupAutoUpdates();
       this.createWindow();
       this.setupMenu();
       this.setupIPC();
@@ -133,59 +134,31 @@ class OrderManagementApp {
   /**
    * Sets up event listeners for electron-updater.
    */
-  setupAutoUpdater() {
+  setupAutoUpdates(mainWindow) {
+    autoUpdater.checkForUpdatesAndNotify();
+
     autoUpdater.on("checking-for-update", () => {
-      console.log("[autoUpdater] Checking for updates...");
-      this.sendStatusToWindow("update:status", {
-        message: "Checking for update...",
-        status: "checking",
-      });
+      mainWindow.webContents.send("update:status", "checking");
     });
 
-    autoUpdater.on("update-available", (info) => {
-      console.log("[autoUpdater] Update available:", info);
-      this.sendStatusToWindow("update:status", {
-        message: `Update available! Version ${info.version} is downloading...`,
-        status: "downloading",
-        version: info.version,
-      });
+    autoUpdater.on("update-available", () => {
+      mainWindow.webContents.send("update:status", "available");
     });
 
-    autoUpdater.on("update-not-available", (info) => {
-      this.sendStatusToWindow("update:status", {
-        message: `You are running the latest version: ${info.version}`,
-        status: "latest",
-      });
+    autoUpdater.on("update-not-available", () => {
+      mainWindow.webContents.send("update:status", "none");
+    });
+
+    autoUpdater.on("download-progress", (progress) => {
+      mainWindow.webContents.send("update:progress", progress.percent);
+    });
+
+    autoUpdater.on("update-downloaded", () => {
+      mainWindow.webContents.send("update:status", "downloaded");
     });
 
     autoUpdater.on("error", (err) => {
-      this.sendStatusToWindow("update:status", {
-        message: `Update error: ${err.message}`,
-        status: "error",
-      });
-      console.error("Updater Error:", err);
-    });
-
-    autoUpdater.on("download-progress", (progressObj) => {
-      this.sendStatusToWindow("update:progress", {
-        progress: progressObj.percent,
-        bytesPerSecond: progressObj.bytesPerSecond,
-      });
-    });
-
-    autoUpdater.on("update-downloaded", (info) => {
-      this.sendStatusToWindow("update:status", {
-        message: `Update ${info.version} downloaded. App will restart in 5 seconds to apply.`,
-        status: "downloaded",
-      });
-      console.log("[autoUpdater] Update downloaded:", info); // Relaunch the app after 5 seconds to install the update
-      setTimeout(() => {
-        autoUpdater.quitAndInstall();
-      }, 5000);
-    }); // Handle manual update check from renderer (using the IPC channel from preload.js)
-
-    ipcMain.on("update:check-manual", (event) => {
-      this.checkUpdateManually();
+      mainWindow.webContents.send("update:status", "error");
     });
   }
 
@@ -547,6 +520,10 @@ class OrderManagementApp {
 
     ipcMain.handle("get-stats", async () => {
       return await database.getStats();
+    });
+
+    ipcMain.handle("update:restart", () => {
+      autoUpdater.quitAndInstall();
     });
   }
 
