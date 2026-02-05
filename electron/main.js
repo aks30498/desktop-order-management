@@ -204,6 +204,123 @@ class OrderManagementApp {
       "update-payment-status",
       safe((_, id, s) => database.updatePaymentStatus(id, s)),
     );
+
+    ipcMain.handle("update-customer", async (_, payload) => {
+      try {
+        await database.updateCustomer(payload);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    ipcMain.handle("get-order-by-id", async (event, id) => {
+      try {
+        const order = await database.getOrderById(id);
+        return { success: true, order };
+      } catch (error) {
+        console.error("Error fetching order:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("save-image", async (event, imageData, orderId) => {
+      try {
+        const imagePath = await this.saveOrderImage(imageData, orderId);
+        return { success: true, imagePath };
+      } catch (error) {
+        console.error("Error saving image:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("select-image", async () => {
+      try {
+        const result = await dialog.showOpenDialog(this.mainWindow, {
+          title: "Select Requirements Image",
+          properties: ["openFile"],
+          filters: [
+            {
+              name: "Images",
+              extensions: ["jpg", "jpeg", "png", "gif", "webp"],
+            },
+          ],
+        });
+
+        if (!result.canceled && result.filePaths.length > 0) {
+          return { success: true, filePath: result.filePaths[0] };
+        }
+        return { success: false, error: "No file selected" };
+      } catch (error) {
+        console.error("Error selecting image:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("print-order", async (event, orderId) => {
+      try {
+        const order = await database.getOrderById(orderId);
+        if (!order) {
+          throw new Error("Order not found");
+        }
+        await printService.printOrderSlips(order);
+        return { success: true };
+      } catch (error) {
+        console.error("Error printing order:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("generate-order-pdf", async (event, orderId) => {
+      try {
+        const order = await database.getOrderById(orderId);
+        if (!order) {
+          throw new Error("Order not found");
+        }
+        const outputPath = path.join(
+          app.getPath("temp"),
+          `order-${orderId}-slips.pdf`,
+        );
+        await printService.printToPDF(order, outputPath);
+        return { success: true, pdfPath: outputPath };
+      } catch (error) {
+        console.error("Error generating PDF:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("print-to-pdf", async (event, orderId, outputPath) => {
+      try {
+        const order = await database.getOrderById(orderId);
+        if (!order) {
+          throw new Error("Order not found");
+        }
+        const pdfPath = await printService.printToPDF(order, outputPath);
+        return { success: true, filePath: pdfPath };
+      } catch (error) {
+        console.error("Error creating PDF:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("preview-order-pdf", async (event, orderId) => {
+      try {
+        const order = await database.getOrderById(orderId);
+        if (!order) {
+          throw new Error("Order not found");
+        }
+        const outputPath = path.join(
+          app.getPath("temp"),
+          `order-${orderId}-preview.pdf`,
+        );
+        const result = await printService.previewPDF(order, outputPath);
+        return { success: true, filePath: result.path };
+      } catch (error) {
+        console.error("Error creating PDF preview:", error);
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle(
       "search-customers",
       safe((_, q) => database.searchCustomers(q)),
@@ -224,6 +341,67 @@ class OrderManagementApp {
   setupImageStorage() {
     this.imagesPath = path.join(app.getPath("userData"), "images");
     fs.mkdirSync(this.imagesPath, { recursive: true });
+  }
+
+  async saveOrderImage(imageData, orderId) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const dateDir = path.join(this.imagesPath, String(year), month, day);
+    if (!fs.existsSync(dateDir)) {
+      fs.mkdirSync(dateDir, { recursive: true });
+    }
+
+    const timestamp = now.getTime();
+    const extension = this.getImageExtension(imageData);
+    const filename = `order_${orderId}_${timestamp}.${extension}`;
+    const imagePath = path.join(dateDir, filename);
+
+    if (imageData.startsWith("data:")) {
+      const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      fs.writeFileSync(imagePath, buffer);
+    } else {
+      fs.copyFileSync(imageData, imagePath);
+    }
+
+    return imagePath;
+  }
+
+  getImageExtension(imageData) {
+    if (imageData.includes("data:image/png")) return "png";
+    if (
+      imageData.includes("data:image/jpeg") ||
+      imageData.includes("data:image/jpg")
+    )
+      return "jpg";
+    if (imageData.includes("data:image/gif")) return "gif";
+    if (imageData.includes("data:image/webp")) return "webp";
+    return "jpg";
+  }
+
+  async exportData(filePath) {
+    try {
+      const orders = await database.getOrders();
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        version: app.getVersion(), // Use app.getVersion()
+        orders: orders,
+      };
+      fs.writeFileSync(filePath, JSON.stringify(exportData, null, 2));
+      dialog.showMessageBox(this.mainWindow, {
+        type: "info",
+        title: "Export Successful",
+        message: "Orders data exported successfully!",
+        detail: `Data saved to: ${filePath}`,
+      });
+    } catch (error) {
+      dialog.showErrorBox(
+        "Export Failed",
+        `Failed to export data: ${error.message}`,
+      );
+    }
   }
 
   /* --------------------------------------------------- */

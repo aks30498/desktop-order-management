@@ -214,12 +214,12 @@ export default function OrderFormView({ onOrderCreated }) {
       };
 
       const result = await Helpers.ipcInvoke("add-order", payload);
-      if (!result.success) throw new Error(result.error);
 
       toast({ title: "Order added successfully" });
       onOrderCreated?.();
       onClose();
     } catch (err) {
+      console.log("err", err);
       toast({ variant: "destructive", title: "Failed to add order" });
     } finally {
       setIsSubmitting(false);
@@ -328,6 +328,14 @@ export default function OrderFormView({ onOrderCreated }) {
               <Input
                 value={form.orderTime}
                 onChange={(e) => update("orderTime", e.target.value)}
+              />
+            </Field>
+
+            <Field label="Weight">
+              <Input
+                placeholder="e.g. 5g or 500g"
+                value={form.weight}
+                onChange={(e) => update("weight", e.target.value)}
               />
             </Field>
           </div>
