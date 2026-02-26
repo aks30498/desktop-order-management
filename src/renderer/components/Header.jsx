@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 export default function Header() {
   const navigate = useNavigate();
@@ -16,9 +17,7 @@ export default function Header() {
 
       <div className="flex gap-2">
         <Button
-          variant={
-            location.pathname.startsWith("/orders") ? "default" : "ghost"
-          }
+          variant={location.pathname === "/" ? "outline" : "ghost"}
           onClick={() => navigate("/")}
         >
           Orders
@@ -26,14 +25,18 @@ export default function Header() {
 
         <Button
           variant={
-            location.pathname.startsWith("/customers") ? "default" : "ghost"
+            location.pathname.startsWith("/customers") ? "outline" : "ghost"
           }
           onClick={() => navigate("/customers")}
         >
           Customers
         </Button>
-
-        <Button onClick={() => navigate("/orders/new")}>New Order</Button>
+      </div>
+      <div>
+        <Button onClick={() => navigate("/orders/new")}>
+          <Plus size={16} />
+          New Order
+        </Button>
       </div>
     </header>
   );

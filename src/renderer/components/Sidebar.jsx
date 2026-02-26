@@ -24,12 +24,6 @@ export default function Sidebar({ onAddOrder }) {
   return (
     <aside className="w-72 border-r bg-muted/40">
       <div className="flex h-full flex-col gap-4 p-4">
-        {/* Add Order */}
-        <Button onClick={onAddOrder} className="w-full gap-2">
-          <Plus size={16} />
-          New Order
-        </Button>
-
         {/* Statistics */}
         <Card>
           <CardHeader className="pb-2 flex-row items-center justify-between">
